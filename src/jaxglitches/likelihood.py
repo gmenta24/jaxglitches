@@ -102,6 +102,42 @@ def make_log_likelihood(data_fd, psd_fd, freq, T: float = T_ARM_s, tdi: int = 1)
     return log_L
 
 
+def fisher_matrix(params, freq, psd_fd, T: float = T_ARM_s, tdi: int = 1):
+    """
+    Fisher information matrix in physical parameters [tau, Deltav, beta].
+
+    Gamma_ij = (dh/dtheta_i | dh/dtheta_j)
+             = 2 Re[ sum_{k>0,c} conj(dh[k,c,i]) dh[k,c,j] / S_c[k] ]
+
+    Parameters
+    ----------
+    params : (n,) array [tau, Deltav, beta].
+    freq   : (F,) frequency grid (Hz).
+    psd_fd : (F, 3) noise PSD (must match the tdi generation).
+    T      : one-way arm travel time (s).
+    tdi    : TDI generation (1 or 2).
+
+    Returns
+    -------
+    Gamma : (n, n) real symmetric positive-definite Fisher matrix.
+    """
+    F_len = freq.shape[0]
+    n_p   = params.shape[0]
+
+    def h_split(p):
+        h = clean_signal(p, freq, T=T, tdi=tdi)  # (F, 3) complex
+        return jnp.concatenate([h.real.ravel(), h.imag.ravel()])  # (2*F*3,) real
+
+    J  = jax.jacobian(h_split)(params)    # (2*F*3, n_p) real
+    dh = (J[:F_len * 3].reshape(F_len, 3, n_p)
+          + 1j * J[F_len * 3:].reshape(F_len, 3, n_p))  # (F, 3, n_p) complex
+
+    dh_pos = dh[1:]   # skip DC bin  (F-1, 3, n_p)
+    return 2.0 * jnp.real(
+        jnp.einsum('kci,kcj->ij', jnp.conj(dh_pos), dh_pos / psd_fd[1:, :, None])
+    )
+
+
 def log_posterior(data_fd, h_fd, psd_fd, params, t_obs: float):
     """
     Un-normalised log posterior = log_likelihood + log_prior.

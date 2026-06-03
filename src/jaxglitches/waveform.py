@@ -175,14 +175,7 @@ def tdi2_shap_glitch(t, tau=1.9394221536001746, Deltav=2.22616837e-11, beta=0.79
         mask = t >= ts
         return (
             jnp.where(mask, jnp.heaviside(x, 0), 0.0)
-            * (
-                Deltav
-                * (
-                    beta
-                    - jnp.where(mask, jnp.exp(-x / beta), 0.0)
-                    * (x + beta)
-                )
-            )
+            * (Deltav * (beta - jnp.where(mask, jnp.exp(-x / beta), 0.0)* (x + beta)))
         )
 
     # X channel: 1, -2, 1

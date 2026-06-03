@@ -39,8 +39,7 @@ _P_DEF  = 15.0       # OMS optical path noise (pm/√Hz)
 # TDI-1 base PSD (A, E, T channels)
 # ---------------------------------------------------------------------------
 
-def psd_tdi1(f, T: float = _ARM_m / _C_SI,
-             A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
+def psd_tdi1(f, A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
     """
     TDI-1 noise PSD for A, E, T channels.
 
@@ -50,7 +49,6 @@ def psd_tdi1(f, T: float = _ARM_m / _C_SI,
     Parameters
     ----------
     f  : array of positive frequencies (Hz).
-    T  : one-way arm travel time L/c (s).
     A  : test-mass acceleration noise (pm/s²/√Hz).
     P  : OMS noise (pm/√Hz).
     L  : arm length (m).
@@ -59,6 +57,7 @@ def psd_tdi1(f, T: float = _ARM_m / _C_SI,
     -------
     S_A, S_E, S_T : arrays of shape (len(f),).
     """
+    T = L / _C_SI
     x = 2.0 * jnp.pi * f * T        # dimensionless phase per one-way trip
 
     S_acc = (
@@ -76,10 +75,9 @@ def psd_tdi1(f, T: float = _ARM_m / _C_SI,
     return S_A, S_E, S_T
 
 
-def psd_tdi1_array(f, T: float = _ARM_m / _C_SI,
-                   A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
+def psd_tdi1_array(f, A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
     """Return TDI-1 PSD as an (F, 3) array — columns [S_A, S_E, S_T]."""
-    S_A, S_E, S_T = psd_tdi1(f, T=T, A=A, P=P, L=L)
+    S_A, S_E, S_T = psd_tdi1(f, A=A, P=P, L=L)
     return jnp.stack([S_A, S_E, S_T], axis=-1)
 
 
@@ -87,8 +85,7 @@ def psd_tdi1_array(f, T: float = _ARM_m / _C_SI,
 # TDI-2 PSD  (= TDI-1 × |TF1|²)
 # ---------------------------------------------------------------------------
 
-def psd_tdi2(f, T: float = _ARM_m / _C_SI,
-             A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
+def psd_tdi2(f, A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
     """
     TDI-2 noise PSD for A, E, T channels.
 
@@ -102,16 +99,16 @@ def psd_tdi2(f, T: float = _ARM_m / _C_SI,
     -------
     S_A, S_E, S_T : arrays of shape (len(f),).
     """
-    S_A1, S_E1, S_T1 = psd_tdi1(f, T=T, A=A, P=P, L=L)
+    T = L / _C_SI
+    S_A1, S_E1, S_T1 = psd_tdi1(f, A=A, P=P, L=L)
     # |TF1|^2 = |exp(-4i*T*2πf) - 1|^2 = 4 sin^2(4πfT)
     factor = 4.0 * jnp.sin(4.0 * jnp.pi * f * T) ** 2
     return factor * S_A1, factor * S_E1, factor * S_T1
 
 
-def psd_tdi2_array(f, T: float = _ARM_m / _C_SI,
-                   A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
+def psd_tdi2_array(f, A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
     """Return TDI-2 PSD as an (F, 3) array — columns [S_A, S_E, S_T]."""
-    S_A, S_E, S_T = psd_tdi2(f, T=T, A=A, P=P, L=L)
+    S_A, S_E, S_T = psd_tdi2(f, A=A, P=P, L=L)
     return jnp.stack([S_A, S_E, S_T], axis=-1)
 
 
