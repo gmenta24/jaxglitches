@@ -104,14 +104,14 @@ def make_log_likelihood(data_fd, psd_fd, freq, T: float = T_ARM_s, tdi: int = 1)
 
 def fisher_matrix(params, freq, psd_fd, T: float = T_ARM_s, tdi: int = 1):
     """
-    Fisher information matrix in physical parameters [tau, Deltav, beta].
+    Fisher information matrix in physical parameters [t0, Deltav, tau].
 
     Gamma_ij = (dh/dtheta_i | dh/dtheta_j)
              = 2 Re[ sum_{k>0,c} conj(dh[k,c,i]) dh[k,c,j] / S_c[k] ]
 
     Parameters
     ----------
-    params : (n,) array [tau, Deltav, beta].
+    params : (n,) array [t0, Deltav, tau].
     freq   : (F,) frequency grid (Hz).
     psd_fd : (F, 3) noise PSD (must match the tdi generation).
     T      : one-way arm travel time (s).
@@ -147,7 +147,7 @@ def log_posterior(data_fd, h_fd, psd_fd, params, t_obs: float):
     data_fd : complex (F, 3).
     h_fd    : complex (F, 3) — template at params.
     psd_fd  : real   (F, 3).
-    params  : (3,) array [tau, Deltav, beta].
+    params  : (3,) array [t0, Deltav, tau].
     t_obs   : observation window (s) — needed by the prior.
     """
     from .priors import log_prior

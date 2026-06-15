@@ -36,10 +36,10 @@ def clean_signal(params, freq, T: float = T_ARM_s, tdi: int = 1):
 
     Parameters
     ----------
-    params : (3,) array  [tau (s), Deltav (m/s), beta (s)].
-             tau    : glitch onset time (s).
+    params : (3,) array  [t0 (s), Deltav (m/s), tau (s)].
+             t0     : glitch onset time (s).
              Deltav : velocity-kick amplitude (m/s).
-             beta   : exponential decay timescale (s).
+             tau    : exponential decay timescale (s).
     freq   : (F,) frequency array (Hz), e.g. from freq_grid().
     T      : LISA one-way light travel time along one arm (s).
     tdi    : TDI generation — 1 or 2.
@@ -49,19 +49,17 @@ def clean_signal(params, freq, T: float = T_ARM_s, tdi: int = 1):
     h_fd : complex (F, 3), columns [A, E, T_ch].
            DC bin is zero.
     """
-    tau    = params[0]
+    t0     = params[0]
     Deltav = params[1]
-    beta   = params[2]
+    tau    = params[2]
 
     # Replace f=0 to avoid 1/f singularity; DC bin is zeroed afterwards.
     f_safe = jnp.where(freq > 0, freq, 1.0)
 
-    # The single-exponential waveform signature is (freq, t0, Deltav, tau_decay, T);
-    # here tau plays the onset t0 and beta plays the decay time tau_decay.
     if tdi == 1:
-        X, Y, Z = tdi1_1exp_f_glitch(f_safe, tau, Deltav, beta, T)
+        X, Y, Z = tdi1_1exp_f_glitch(f_safe, t0, Deltav, tau, T)
     else:
-        X, Y, Z = tdi2_1exp_f_glitch(f_safe, tau, Deltav, beta, T)
+        X, Y, Z = tdi2_1exp_f_glitch(f_safe, t0, Deltav, tau, T)
 
     A_ch, E_ch, T_ch = AET(X, Y, Z)
     h_fd = jnp.stack([A_ch, E_ch, T_ch], axis=-1)   # (F, 3)
