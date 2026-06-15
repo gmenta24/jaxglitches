@@ -74,33 +74,6 @@ def tdi1_2exp_glitch(t, t0=950,  Deltav=2.22616837*10**(-11), tau1=10, tau2=11 ,
 
     return tdiX1link12, tdiY1link12, tdiZ1link12
 
-#TDI 1 glitch in time domain, with shaplet template
-def tdi1_shap_glitch(t, tau=1.9394221536001746,  Deltav=2.22616837*10**(-11), beta=0.79357148 ,T=8.3):
-
-    tdiX1link12 =  (-2*(Deltav*(beta   - 
-              jnp.exp((-t   + tau  )/beta  )*(t   + beta   -tau  ))*
-             jnp.heaviside(t   - tau  ,0) - 
-           Deltav*(beta   + 
-              jnp.exp((-t   + 4*T + tau  )/beta  )*
-              (-t   + 4*T -beta   +tau  ))*
-             jnp.heaviside(t   - 4*T - tau  ,0)))/C_SI
- 
-    tdiY1link12 = (-4*(Deltav*(beta   + 
-              jnp.exp((-t + 3*T + tau  )/beta  )*
-               (-t + 3*T - beta   + tau  ))*
-             jnp.heaviside(t - 3*T -tau  ,0) - 
-           Deltav*(beta   + 
-              jnp.exp((-t + T + tau  )/beta  )*
-               (-t + T - beta   + tau  ))*
-             jnp.heaviside(t - T -tau  ,0)))/C_SI
-  
-
-    tdiZ1link12 = jnp.zeros_like(tdiX1link12)
-    
-
-
-    return tdiX1link12, tdiY1link12, tdiZ1link12
-
 
 # TDI 2 glitch in time domain, with one exponential template
 def tdi2_1exp_glitch(t, t0=1.9394221536001746, Deltav=2.22616837e-11, tau=0.79357148, T=8.3):
@@ -161,31 +134,6 @@ def tdi2_2exp_glitch(t, t0=950, Deltav=2.22616837e-11, tau1=10, tau2=11, T=8.3):
     tdiZ1link12 = jnp.zeros_like(tdiX1link12)
     return tdiX1link12, tdiY1link12, tdiZ1link12
 
-# TDI 2 glitch in time domain, with shaplet template
-def tdi2_shap_glitch(t, tau=1.9394221536001746, Deltav=2.22616837e-11, beta=0.79357148, T=8.3):
-    def phi(ts):
-        x = t - ts
-        mask = t >= ts
-        return (
-            jnp.where(mask, jnp.heaviside(x, 0), 0.0)
-            * (Deltav * (beta - jnp.where(mask, jnp.exp(-x / beta), 0.0)* (x + beta)))
-        )
-
-    # X channel: 1, -2, 1
-    expr1 = phi(tau)
-    expr2 = phi(tau + 4.0 * T)
-    expr3 = phi(tau + 8.0 * T)
-    tdiX1link12 = (-2.0 * (expr1 - 2.0 * expr2 + expr3)) / C_SI
-
-    # Y channel: alternating pattern
-    expr4 = phi(tau + T)
-    expr5 = phi(tau + 3.0 * T)
-    expr6 = phi(tau + 5.0 * T)
-    expr7 = phi(tau + 7.0 * T)
-    tdiY1link12 = (-4.0 * (-expr4 + expr5 + expr6 - expr7)) / C_SI
-
-    tdiZ1link12 = jnp.zeros_like(tdiX1link12)
-    return tdiX1link12, tdiY1link12, tdiZ1link12
 
 ####  Frequency domain for TDI  ###
 
@@ -213,20 +161,7 @@ def tdi1_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11)
 
     return TFX_single_glich_tm12*Deltanuh , TFY_single_glich_tm12*Deltanuh, TFZ_single_glich_tm12*Deltanuh
 
-#TDI 1 glitch in frequency domain, with shaplet template
-def tdi1_shap_f_glitch(freq, tau=0.79357148,  Deltav=2.22616837*10**(-11), beta=1.9394221536001746 ,T=8.3):    
-   
-    Deltanus = (- 2*Deltav* beta  /(1j*C_SI*2*jnp.pi*freq  ) 
-                * jnp.exp(-1j * tau   *2*jnp.pi*freq  )/(-1j + beta  * 2*jnp.pi*freq  )**2)
 
-
-    TFX1_single_glich_tm12 = (-1 + jnp.exp(-4 * 1j* T* 2*jnp.pi*freq  ))
-    TFY1_single_glich_tm12 = 4 * 1j * jnp.exp(-2 * 1j* T *  2*jnp.pi*freq  )*jnp.sin(T*2*jnp.pi*freq  )
-    TFZ1_single_glich_tm12 = jnp.zeros_like(TFY1_single_glich_tm12)
-
-
-    return TFX1_single_glich_tm12*Deltanus, TFY1_single_glich_tm12*Deltanus, TFZ1_single_glich_tm12*Deltanus
-    
 #TDI 2 glitch in frequency domain, with one exponential template
 def tdi2_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=8.3 ):
 
@@ -250,35 +185,4 @@ def tdi2_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11)
     TFZ_single_glich_tm12 = jnp.zeros_like(TFY_single_glich_tm12)
 
     return TFX_single_glich_tm12*Deltanuh , TFY_single_glich_tm12*Deltanuh, TFZ_single_glich_tm12*Deltanuh
-
-#TDI 2 glitch in frequency domain, with shaplet template
-def tdi2_shap_f_glitch(freq, tau=0.79357148,  Deltav=2.22616837*10**(-11), beta=1.9394221536001746  ,T=8.3):    
-   
-    Deltanus = (2*Deltav* beta  /(1j*C_SI*2*jnp.pi*freq  ) 
-                * jnp.exp(-1j * tau   *2*jnp.pi*freq  )/(-1j + beta  * 2*jnp.pi*freq  )**2)
-    
-    TFX_single_glich_tm12 = jnp.exp(-8 *1j * T *2*jnp.pi*freq  )* (-1 + jnp.exp(4 * 1j* T* 2*jnp.pi*freq  ))**2
-    TFY_single_glich_tm12 = 8 * jnp.exp(-4 * 1j*T *2*jnp.pi*freq  ) * jnp.sin(2 * T *  2*jnp.pi*freq  )*jnp.sin(T*2*jnp.pi*freq  )
-    TFZ_single_glich_tm12 = jnp.zeros_like(TFY_single_glich_tm12)
-
-    return TFX_single_glich_tm12*Deltanus, TFY_single_glich_tm12*Deltanus, TFZ_single_glich_tm12*Deltanus
-
-
-if __name__ == "__main__":
-  
-    ## defining constant to evaluate the glitches/shapelet
-
-    dt = 0.25
-    Tobs = 1/12. *YRSID_SI
-    N = int(Tobs / dt)
-    Tobs = dt * N
-    t_in = jnp.arange(N) * dt
-
-    freqs = jnp.fft.rfftfreq(N, dt)  # fs =1/dt
-    #freqs[freqs == 0] = 1e-50
-
-    fmin = 2.5e-5
-    fmax = 1e-1
-    frequencymask = (freqs > fmin) & (freqs < fmax) # remove ALL the wiggles CAREFULL: we MUST find a way to include them
-    freqs_cut = jnp.array(freqs[frequencymask])
 

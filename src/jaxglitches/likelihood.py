@@ -1,5 +1,5 @@
 """
-Frequency-domain likelihood for a single shapelet glitch in stationary noise.
+Frequency-domain likelihood for a single single-exponential glitch in stationary noise.
 
 Noise model
 -----------

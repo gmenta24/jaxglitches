@@ -1,12 +1,12 @@
 """
-Prior distributions for a single shapelet glitch.
+Prior distributions for a single single-exponential glitch.
 
 Parameter vector (3 components, last axis):
     [tau, Deltav, beta]
 
     tau    : glitch onset time (s)   — uniform over the analysis window
     Deltav : velocity-kick amplitude (m/s) — log-uniform
-    beta   : shapelet decay timescale (s)  — log-uniform
+    beta   : exponential decay timescale (s)  — log-uniform
 
 The prior is expressed through its inverse CDF so it can be composed
 with any sampler that expects unit-hypercube inputs (flowMC, numpyro, etc.).
@@ -22,7 +22,7 @@ jax.config.update("jax_enable_x64", True)
 # Prior bounds
 # Rule of thumb: the boundary must be > 5 marginal-sigma from the MAP so that
 # the prior does not asymmetrically truncate the posterior.  For a typical
-# shapelet SNR~50 the marginal sigma_log(Dv) ~ 0.12, so the wall must be at
+# glitch SNR~50 the marginal sigma_log(Dv) ~ 0.12, so the wall must be at
 # least 0.6 log-units (~factor 2) from the MAP.  The old Dv_MIN=1e-13 was
 # only 1.5 sigma from the MAP and was visibly skewing the posteriors.
 _TAU_MIN   = 0.0      # onset time lower bound (s)
