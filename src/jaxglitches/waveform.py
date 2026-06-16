@@ -4,7 +4,8 @@ jax.config.update("jax_enable_x64", True)
 
 C_SI = 299792458.
 YRSID_SI = 31558149.763545603
-
+ARM_LENGTH_m = 2.5e9           # LISA arm length, m
+T_ARM_s = ARM_LENGTH_m / C_SI  # light travel time along one arm, ~8.336 s
 
 def AET(X, Y, Z):
         return (
@@ -15,7 +16,7 @@ def AET(X, Y, Z):
 #########  Time domain TDI  ###### 
 
 #TDI 1 glitch in time domain, with one exponential template
-def tdi1_1exp_glitch(t, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=8.3):    
+def tdi1_1exp_glitch(t, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=T_ARM_s):    
     mask1 =  t  >= t0
    
     expression1 = (jnp.where(mask1, jnp.heaviside(t  - t0 ,0),0) * (-1 + jnp.where(mask1,jnp.exp( (- t  + t0  ) / tau ),0) + 
@@ -46,7 +47,7 @@ def tdi1_1exp_glitch(t, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau
     return tdiX1link12, tdiY1link12, tdiZ1link12
 
 #TDI 1 glitch in time domain, with two exponentials template
-def tdi1_2exp_glitch(t, t0=950,  Deltav=2.22616837*10**(-11), tau1=10, tau2=11 ,T=8.3):
+def tdi1_2exp_glitch(t, t0=950,  Deltav=2.22616837*10**(-11), tau1=10, tau2=11 ,T=T_ARM_s):
     # First-generation TDI: the X channel combines two delays {t0, t0+4T} and
     # the Y channel two delays {t0+T, t0+3T} (cf. tdi1_1exp_glitch). The previous
     # implementation used the second-generation delay pattern {t0, t0+4T, t0+8T} /
@@ -76,7 +77,7 @@ def tdi1_2exp_glitch(t, t0=950,  Deltav=2.22616837*10**(-11), tau1=10, tau2=11 ,
 
 
 # TDI 2 glitch in time domain, with one exponential template
-def tdi2_1exp_glitch(t, t0=1.9394221536001746, Deltav=2.22616837e-11, tau=0.79357148, T=8.3):
+def tdi2_1exp_glitch(t, t0=1.9394221536001746, Deltav=2.22616837e-11, tau=0.79357148, T=T_ARM_s):
     # Primitive used in your TDI1 implementation, kept in the same convention
     def phi(ts):
         x = t - ts
@@ -105,7 +106,7 @@ def tdi2_1exp_glitch(t, t0=1.9394221536001746, Deltav=2.22616837e-11, tau=0.7935
     return tdiX1link12, tdiY1link12, tdiZ1link12
 
 # TDI 2 glitch in time domain, with two exponentials template
-def tdi2_2exp_glitch(t, t0=950, Deltav=2.22616837e-11, tau1=10, tau2=11, T=8.3):
+def tdi2_2exp_glitch(t, t0=950, Deltav=2.22616837e-11, tau1=10, tau2=11, T=T_ARM_s):
     def phi(ts):
         x = t - ts
         mask = t >= ts
@@ -138,7 +139,7 @@ def tdi2_2exp_glitch(t, t0=950, Deltav=2.22616837e-11, tau1=10, tau2=11, T=8.3):
 ####  Frequency domain for TDI  ###
 
 #TDI 1 glitch in frequency domain, with one exponential template
-def tdi1_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=8.3 ):
+def tdi1_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=T_ARM_s ):
 
     Deltanuh = (- 1/(1j*C_SI*2*jnp.pi* f) * jnp.exp(-1j * t0*2*jnp.pi* f  ) 
                 * Deltav /(-1j + tau* 2*jnp.pi*f  )**2)
@@ -150,7 +151,7 @@ def tdi1_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), 
     return TFX_single_glich_tm12*Deltanuh , TFY_single_glich_tm12*Deltanuh, TFZ_single_glich_tm12*Deltanuh
 
 #TDI 1 glitch in frequency domain, with two exponentials template
-def tdi1_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau1=0.79357148,tau2=0.79357148 ,T=8.3 ):    
+def tdi1_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau1=0.79357148,tau2=0.79357148 ,T=T_ARM_s ):    
    
     Deltanuh = (1/(1j*C_SI*2*jnp.pi*freq  ) * jnp.exp(-1j * t0   *2*jnp.pi*freq  ) * Deltav 
                 /((1+1j * tau1  * 2*jnp.pi*freq  )*(1 +1j * tau2  * 2*jnp.pi*freq  )))
@@ -163,7 +164,7 @@ def tdi1_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11)
 
 
 #TDI 2 glitch in frequency domain, with one exponential template
-def tdi2_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=8.3 ):
+def tdi2_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau=0.79357148 ,T=T_ARM_s ):
 
     Deltanuh = (1/(1j*C_SI*2*jnp.pi* f) * jnp.exp(-1j * t0*2*jnp.pi* f  ) 
                 * Deltav /(-1j + tau* 2*jnp.pi*f  )**2)
@@ -175,7 +176,7 @@ def tdi2_1exp_f_glitch( f, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), 
     return TFX_single_glich_tm12*Deltanuh , TFY_single_glich_tm12*Deltanuh, TFZ_single_glich_tm12*Deltanuh
     
 #TDI 2 glitch in frequency domain, with two exponentials template
-def tdi2_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau1=0.79357148,tau2=0.79357148 ,T=8.3 ):    
+def tdi2_2exp_f_glitch(freq, t0=1.9394221536001746,  Deltav=2.22616837*10**(-11), tau1=0.79357148,tau2=0.79357148 ,T=T_ARM_s ):    
    
     Deltanuh = (1/(1j*C_SI*2*jnp.pi*freq  ) * jnp.exp(-1j * t0   *2*jnp.pi*freq  ) * Deltav
                  /((1+1j * tau1  * 2*jnp.pi*freq  )*(1 +1j * tau2  * 2*jnp.pi*freq  )))

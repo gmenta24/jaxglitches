@@ -15,7 +15,7 @@ parameter space.
 """
 import jax
 import jax.numpy as jnp
-from .constants import T_OBS_s
+T_OBS_s = 3600.0     # 1 hour observation window
 
 jax.config.update("jax_enable_x64", True)
 

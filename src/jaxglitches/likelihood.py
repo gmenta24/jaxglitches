@@ -28,8 +28,8 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
-from .constants import T_ARM_s
-from .data import clean_signal
+from .waveform import T_ARM_s
+from .data import clean_signal_f
 
 jax.config.update("jax_enable_x64", True)
 
@@ -88,7 +88,7 @@ def make_log_likelihood(data_fd, psd_fd, freq, T: float = T_ARM_s, tdi: int = 1)
     psd_fd  : real   (F, 3) noise PSD — use the correct PSD for this TDI generation.
     freq    : (F,) frequency array (Hz).
     T       : LISA arm light travel time (s).
-    tdi     : TDI generation (1 or 2) — static arg for clean_signal.
+    tdi     : TDI generation (1 or 2) — static arg for clean_signal_f.
 
     Returns
     -------
@@ -96,7 +96,7 @@ def make_log_likelihood(data_fd, psd_fd, freq, T: float = T_ARM_s, tdi: int = 1)
     """
     @partial(jax.jit, static_argnames=())
     def log_L(params):
-        h_fd = clean_signal(params, freq, T=T, tdi=tdi)
+        h_fd = clean_signal_f(params, freq, T=T, tdi=tdi)
         return log_likelihood(data_fd, h_fd, psd_fd)
 
     return log_L
@@ -125,7 +125,7 @@ def fisher_matrix(params, freq, psd_fd, T: float = T_ARM_s, tdi: int = 1):
     n_p   = params.shape[0]
 
     def h_split(p):
-        h = clean_signal(p, freq, T=T, tdi=tdi)  # (F, 3) complex
+        h = clean_signal_f(p, freq, T=T, tdi=tdi)  # (F, 3) complex
         return jnp.concatenate([h.real.ravel(), h.imag.ravel()])  # (2*F*3,) real
 
     J  = jax.jacobian(h_split)(params)    # (2*F*3, n_p) real
