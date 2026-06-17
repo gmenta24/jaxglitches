@@ -8,13 +8,15 @@ Convention
 
 where H_c(f) is the analytical Fourier transform of TDI channel c evaluated
 at discrete frequency f_k (the DC bin is set to zero), and h_c(t) is the
-corresponding time-domain TDI channel evaluated at time t_n.
+corresponding time-domain TDI channel evaluated at time t_n.  The channel
+columns c are [A, E, T] when basis="AET" (default) or [X, Y, Z] when
+basis="XYZ".
 
 Public API
 ----------
 freq_grid(t_obs, dt)                                 -> (F,) real array
-clean_signal_f(params, freq, T, tdi)                 -> (F, 3) complex array
-clean_signal_t(params, t, T, tdi)                    -> (N, 3) real array
+clean_signal_f(params, freq, T, tdi, basis)          -> (F, 3) complex array
+clean_signal_t(params, t, T, tdi, basis)             -> (N, 3) real array
 """
 import jax
 import jax.numpy as jnp
@@ -38,10 +40,10 @@ def freq_grid(t_obs: float = T_OBS_s, dt: float = DT_s):
     return jnp.fft.rfftfreq(n, dt)
 
 
-@partial(jax.jit, static_argnames=("tdi",))
-def clean_signal_f(params, freq, T: float = T_ARM_s, tdi: int = 1):
+@partial(jax.jit, static_argnames=("tdi", "basis"))
+def clean_signal_f(params, freq, T: float = T_ARM_s, tdi: int = 1, basis: str = "AET"):
     """
-    Frequency-domain TDI A/E/T signal for a single-exponential glitch.
+    Frequency-domain TDI signal for a single-exponential glitch.
 
     Parameters
     ----------
@@ -52,10 +54,11 @@ def clean_signal_f(params, freq, T: float = T_ARM_s, tdi: int = 1):
     freq   : (F,) frequency array (Hz), e.g. from freq_grid().
     T      : LISA one-way light travel time along one arm (s).
     tdi    : TDI generation — 1 or 2.
+    basis  : output channel basis — "AET" (default) or "XYZ".
 
     Returns
     -------
-    h_fd : complex (F, 3), columns [A, E, T_ch].
+    h_fd : complex (F, 3), columns [A, E, T] if basis="AET" else [X, Y, Z].
            DC bin is zero.
     """
     t0     = params[0]
@@ -67,18 +70,26 @@ def clean_signal_f(params, freq, T: float = T_ARM_s, tdi: int = 1):
 
     if tdi == 1:
         X, Y, Z = tdi1_1exp_f_glitch(f_safe, t0, Deltav, tau, T)
-    else:
+    elif tdi == 2:
         X, Y, Z = tdi2_1exp_f_glitch(f_safe, t0, Deltav, tau, T)
+    else:
+        raise ValueError(f"tdi must be 1 or 2, got {tdi!r}")
 
-    A_ch, E_ch, T_ch = AET(X, Y, Z)
-    h_fd = jnp.stack([A_ch, E_ch, T_ch], axis=-1)   # (F, 3)
+    if basis == "AET":
+        c0, c1, c2 = AET(X, Y, Z)
+    elif basis == "XYZ":
+        c0, c1, c2 = X, Y, Z
+    else:
+        raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
+
+    h_fd = jnp.stack([c0, c1, c2], axis=-1)   # (F, 3)
     return h_fd.at[0].set(0.0 + 0.0j)
 
 
-@partial(jax.jit, static_argnames=("tdi",))
-def clean_signal_t(params, t, T: float = T_ARM_s, tdi: int = 1):
+@partial(jax.jit, static_argnames=("tdi", "basis"))
+def clean_signal_t(params, t, T: float = T_ARM_s, tdi: int = 1, basis: str = "AET"):
     """
-    Time-domain TDI A/E/T signal for a single-exponential glitch.
+    Time-domain TDI signal for a single-exponential glitch.
 
     Parameters
     ----------
@@ -89,10 +100,11 @@ def clean_signal_t(params, t, T: float = T_ARM_s, tdi: int = 1):
     t      : (N,) time array (s).
     T      : LISA one-way light travel time along one arm (s).
     tdi    : TDI generation — 1 or 2.
+    basis  : output channel basis — "AET" (default) or "XYZ".
 
     Returns
     -------
-    h_td : real (N, 3), columns [A, E, T_ch].
+    h_td : real (N, 3), columns [A, E, T] if basis="AET" else [X, Y, Z].
     """
     t0     = params[0]
     Deltav = params[1]
@@ -100,8 +112,16 @@ def clean_signal_t(params, t, T: float = T_ARM_s, tdi: int = 1):
 
     if tdi == 1:
         X, Y, Z = tdi1_1exp_glitch(t, t0, Deltav, tau, T)
-    else:
+    elif tdi == 2:
         X, Y, Z = tdi2_1exp_glitch(t, t0, Deltav, tau, T)
+    else:
+        raise ValueError(f"tdi must be 1 or 2, got {tdi!r}")
 
-    A_ch, E_ch, T_ch = AET(X, Y, Z)
-    return jnp.stack([A_ch, E_ch, T_ch], axis=-1)   # (N, 3)
+    if basis == "AET":
+        c0, c1, c2 = AET(X, Y, Z)
+    elif basis == "XYZ":
+        c0, c1, c2 = X, Y, Z
+    else:
+        raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
+
+    return jnp.stack([c0, c1, c2], axis=-1)   # (N, 3)
