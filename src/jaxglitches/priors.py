@@ -12,9 +12,19 @@ The prior is expressed through its inverse CDF so it can be composed
 with any sampler that expects unit-hypercube inputs (flowMC, numpyro, etc.).
 Log-prior functions are also provided for samplers that work directly in
 parameter space.
+
+Samplers usually explore the *sampling* coordinates
+
+    xi = [t0, log Deltav, log tau]
+
+in which the log-uniform priors on Deltav and tau become flat (their Jacobian
+cancels). `to_sampling`/`to_physical` convert between the two, and
+`log_prior_sampling` / `sample_prior` give the prior and prior draws directly in
+these coordinates.
 """
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 T_OBS_s = 3600.0     # 1 hour observation window
 
 jax.config.update("jax_enable_x64", True)
@@ -91,3 +101,63 @@ def prior_bounds(t_obs: float = T_OBS_s):
     lower = jnp.array([0.0,        _DELTAV_MIN, _TAU_MIN])
     upper = jnp.array([t_obs,      _DELTAV_MAX, _TAU_MAX])
     return lower, upper
+
+
+# ── Sampling coordinates xi = [t0, log Deltav, log tau] ────────────────────────
+
+def to_sampling(params):
+    """
+    Physical -> sampling coordinates, on the last axis:
+
+        [t0, Deltav, tau]  ->  [t0, log Deltav, log tau]
+
+    Accepts a single (3,) vector or a batch (..., 3).
+    """
+    return jnp.stack(
+        [params[..., 0], jnp.log(params[..., 1]), jnp.log(params[..., 2])], axis=-1
+    )
+
+
+def to_physical(xi):
+    """
+    Sampling -> physical coordinates (inverse of `to_sampling`), on the last axis:
+
+        [t0, log Deltav, log tau]  ->  [t0, Deltav, tau]
+
+    Accepts a single (3,) vector or a batch (..., 3).
+    """
+    return jnp.stack(
+        [xi[..., 0], jnp.exp(xi[..., 1]), jnp.exp(xi[..., 2])], axis=-1
+    )
+
+
+def sampling_bounds(t_obs: float = T_OBS_s):
+    """Return (lower, upper) bound arrays of shape (3,) in sampling coordinates."""
+    lower, upper = prior_bounds(t_obs)
+    return to_sampling(lower), to_sampling(upper)
+
+
+def log_prior_sampling(xi, t_obs: float = T_OBS_s):
+    """
+    Log prior in sampling coordinates [t0, log Deltav, log tau].
+
+    The physical prior is uniform in t0 and log-uniform in Deltav and tau; in these
+    log coordinates its Jacobian cancels, so the prior is *flat* inside the box.
+    Returns 0.0 inside the prior support and -inf outside. Accepts a single (3,)
+    vector or a batch (..., 3) (then the result has shape (...,)).
+    """
+    lower, upper = sampling_bounds(t_obs)
+    in_bounds = jnp.all((xi >= lower) & (xi <= upper), axis=-1)
+    return jnp.where(in_bounds, 0.0, -jnp.inf)
+
+
+def sample_prior(key, n: int, t_obs: float = T_OBS_s):
+    """
+    Draw `n` samples from the prior, returned in sampling coordinates
+    [t0, log Deltav, log tau] with shape (n, 3).
+
+    Uses `prior_inverse_cdf` on uniform-hypercube draws, so the samples follow the
+    exact prior (uniform t0, log-uniform Deltav and tau).
+    """
+    u = jr.uniform(key, (n, 3))
+    return to_sampling(prior_inverse_cdf(u, t_obs))
