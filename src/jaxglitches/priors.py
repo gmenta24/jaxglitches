@@ -8,6 +8,24 @@ Parameter vector (3 components, last axis):
     Deltav : velocity-kick amplitude (m/s) — log-uniform
     tau   : exponential decay timescale (s)  — log-uniform
 
+Physical model and bounds
+-------------------------
+These parameters follow the LISA Pathfinder glitch model implemented in the
+LISA Glitch tool (https://gitlab.in2p3.fr/lisa-simulation/glitch). A glitch is a
+single-component (n = 1) shapelet in differential acceleration; integrated in
+time it produces a velocity kick
+
+    Delta_v = "equivalent transferred impulse"   (the amplitude here, m/s)
+    tau     = "equivalent damping time" beta      (s)
+    t0      = arrival time                        (s)
+
+The bounds below are chosen from the observed LPF population characterised in
+Baghi et al. 2022 (PRD 105, 042002; arXiv:2112.07490): transferred impulses are
+mostly in 1e-15 - 1e-13 m/s with a detection floor near 2e-16 m/s, and damping
+times range from below the sampling time up to a few hours, most under a minute.
+`catalog_generator.py` draws from exactly these priors and adds the LPF event
+rate to synthesise realistic glitch catalogues.
+
 The prior is expressed through its inverse CDF so it can be composed
 with any sampler that expects unit-hypercube inputs (flowMC, numpyro, etc.).
 Log-prior functions are also provided for samplers that work directly in
@@ -30,16 +48,21 @@ T_OBS_s = 3600.0     # 1 hour observation window
 jax.config.update("jax_enable_x64", True)
 
 # Prior bounds
-# Rule of thumb: the boundary must be > 5 marginal-sigma from the MAP so that
-# the prior does not asymmetrically truncate the posterior.  For a typical
-# glitch SNR~50 the marginal sigma_log(Dv) ~ 0.12, so the wall must be at
-# least 0.6 log-units (~factor 2) from the MAP.  The old Dv_MIN=1e-13 was
-# only 1.5 sigma from the MAP and was visibly skewing the posteriors.
+# Anchored on the LISA Pathfinder glitch population of the LISA Glitch tool
+# (lisa-simulation/glitch; Baghi et al. 2022, arXiv:2112.07490). The tau bounds
+# are the exact damping-time support the tool renormalises its sampler onto
+# (sample_lpf.py: exp(-2.3026)=0.1 s to exp(10.8198)=5e4 s). The Delta_v bounds
+# span the amplitude support of the fitted catalogue (|level| up to ~2.15e-8 m/s,
+# median ~3e-13 m/s) with a practical lower detection floor; the box is wide
+# enough not to asymmetrically truncate posteriors (rule of thumb: the wall
+# should sit > 5 marginal-sigma from the MAP; SNR~50 gives sigma_log(Dv) ~ 0.12).
+# The *realistic* (non-uniform) population lives in catalog_generator.py, which
+# resamples the empirical LPF catalogue rather than this log-uniform box.
 _T0_MIN   = 0.0      # onset time lower bound (s)
-_DELTAV_MIN = 1e-16   # minimum velocity kick (m/s)  — 57 sigma from a typical MAP
-_DELTAV_MAX = 1e-8    # maximum velocity kick (m/s)
-_TAU_MIN   = 0.01    # minimum decay timescale (s)
-_TAU_MAX   = 1000.0  # maximum decay timescale (s)
+_DELTAV_MIN = 1e-16   # minimum velocity kick (m/s)  — practical detection floor
+_DELTAV_MAX = 1e-7    # maximum velocity kick (m/s)  — above brightest LPF event (~2e-8)
+_TAU_MIN   = 0.1     # minimum decay timescale (s)  — LPF sampler support (~sample rate)
+_TAU_MAX   = 5e4     # maximum decay timescale (s)  — LPF sampler support (longest events)
 
 
 def prior_inverse_cdf(u, t_obs: float = T_OBS_s):
