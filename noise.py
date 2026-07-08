@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)
 # Default LISA noise parameters (LISA red-book / SciRD values)
 _ARM_m  = 2.5e9      # arm length (m)
 _C_SI   = 299792458.0
-_A_DEF  = 3.0        # test-mass acceleration noise (pm/s²/√Hz)
+_A_DEF  = 3.0        # test-mass acceleration noise (fm/s²/√Hz; 3e-15 is the SciRD value)
 _P_DEF  = 15.0       # OMS optical path noise (pm/√Hz)
 
 
@@ -49,7 +49,7 @@ def psd_tdi1(f, A: float = _A_DEF, P: float = _P_DEF, L: float = _ARM_m):
     Parameters
     ----------
     f  : array of positive frequencies (Hz).
-    A  : test-mass acceleration noise (pm/s²/√Hz).
+    A  : test-mass acceleration noise (fm/s²/√Hz).
     P  : OMS noise (pm/√Hz).
     L  : arm length (m).
 
