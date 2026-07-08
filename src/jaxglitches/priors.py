@@ -43,7 +43,8 @@ these coordinates.
 import jax
 import jax.numpy as jnp
 import jax.random as jr
-T_OBS_s = 3600.0     # 1 hour observation window
+
+from .data import T_OBS_s  # default observation window, shared with data.py
 
 jax.config.update("jax_enable_x64", True)
 

@@ -1,7 +1,7 @@
 [project]
 name = "jaxglitches"
 version = "0.1.0"
-description = "Add your description here"
+description = "JAX-based LISA glitch waveforms, TDI responses (equal and unequal arms), and parameter-estimation utilities"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,6 +18,14 @@ notebook = [
     "scipy",
     "ipykernel",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# src layout; the bundled LPF catalogue (lpf_data/*.txt) ships with the wheel
+packages = ["src/jaxglitches"]
 
 [dependency-groups]
 dev = [

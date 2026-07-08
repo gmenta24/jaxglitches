@@ -29,7 +29,6 @@ fisher_matrix_unequal(params, freq, psd_fd, ltt, tdi) -> (n, n) array
 """
 import jax
 import jax.numpy as jnp
-from functools import partial
 
 from .waveform import T_ARM_s
 from .data import clean_signal_f, clean_signal_f_unequal
@@ -101,7 +100,7 @@ def make_log_likelihood(data_fd, psd_fd, freq, T: float = T_ARM_s, tdi: int = 1)
     -------
     log_L : callable, log_L(params) -> scalar.
     """
-    @partial(jax.jit, static_argnames=())
+    @jax.jit
     def log_L(params):
         h_fd = clean_signal_f(params, freq, T=T, tdi=tdi)
         return log_likelihood(data_fd, h_fd, psd_fd)
@@ -134,12 +133,36 @@ def make_log_likelihood_unequal(data_fd, psd_fd, freq, ltt, tdi: int = 1):
     """
     ltt = jnp.asarray(ltt)
 
-    @partial(jax.jit, static_argnames=())
+    @jax.jit
     def log_L(params):
         h_fd = clean_signal_f_unequal(params, freq, ltt, tdi=tdi)
         return log_likelihood(data_fd, h_fd, psd_fd)
 
     return log_L
+
+
+def _fisher_from_template(h_of_params, params, psd_fd):
+    """Fisher matrix Gamma_ij = (dh/dtheta_i | dh/dtheta_j) for a
+    frequency-domain template function h_of_params(params) -> (F, 3).
+
+    Uses forward-mode differentiation: n_p tangent passes, much cheaper than
+    reverse mode for n_p << 2*F*3 outputs.
+    """
+    F_len = psd_fd.shape[0]
+    n_p   = params.shape[0]
+
+    def h_split(p):
+        h = h_of_params(p)                                        # (F, 3) complex
+        return jnp.concatenate([h.real.ravel(), h.imag.ravel()])  # (2*F*3,) real
+
+    J  = jax.jacfwd(h_split)(params)      # (2*F*3, n_p) real
+    dh = (J[:F_len * 3].reshape(F_len, 3, n_p)
+          + 1j * J[F_len * 3:].reshape(F_len, 3, n_p))  # (F, 3, n_p) complex
+
+    dh_pos = dh[1:]   # skip DC bin  (F-1, 3, n_p)
+    return 2.0 * jnp.real(
+        jnp.einsum('kci,kcj->ij', jnp.conj(dh_pos), dh_pos / psd_fd[1:, :, None])
+    )
 
 
 def fisher_matrix(params, freq, psd_fd, T: float = T_ARM_s, tdi: int = 1):
@@ -161,20 +184,8 @@ def fisher_matrix(params, freq, psd_fd, T: float = T_ARM_s, tdi: int = 1):
     -------
     Gamma : (n, n) real symmetric positive-definite Fisher matrix.
     """
-    F_len = freq.shape[0]
-    n_p   = params.shape[0]
-
-    def h_split(p):
-        h = clean_signal_f(p, freq, T=T, tdi=tdi)  # (F, 3) complex
-        return jnp.concatenate([h.real.ravel(), h.imag.ravel()])  # (2*F*3,) real
-
-    J  = jax.jacobian(h_split)(params)    # (2*F*3, n_p) real
-    dh = (J[:F_len * 3].reshape(F_len, 3, n_p)
-          + 1j * J[F_len * 3:].reshape(F_len, 3, n_p))  # (F, 3, n_p) complex
-
-    dh_pos = dh[1:]   # skip DC bin  (F-1, 3, n_p)
-    return 2.0 * jnp.real(
-        jnp.einsum('kci,kcj->ij', jnp.conj(dh_pos), dh_pos / psd_fd[1:, :, None])
+    return _fisher_from_template(
+        lambda p: clean_signal_f(p, freq, T=T, tdi=tdi), params, psd_fd
     )
 
 
@@ -197,21 +208,9 @@ def fisher_matrix_unequal(params, freq, psd_fd, ltt, tdi: int = 1):
     -------
     Gamma : (n, n) real symmetric positive-definite Fisher matrix.
     """
-    ltt   = jnp.asarray(ltt)
-    F_len = freq.shape[0]
-    n_p   = params.shape[0]
-
-    def h_split(p):
-        h = clean_signal_f_unequal(p, freq, ltt, tdi=tdi)  # (F, 3) complex
-        return jnp.concatenate([h.real.ravel(), h.imag.ravel()])  # (2*F*3,) real
-
-    J  = jax.jacobian(h_split)(params)    # (2*F*3, n_p) real
-    dh = (J[:F_len * 3].reshape(F_len, 3, n_p)
-          + 1j * J[F_len * 3:].reshape(F_len, 3, n_p))  # (F, 3, n_p) complex
-
-    dh_pos = dh[1:]   # skip DC bin  (F-1, 3, n_p)
-    return 2.0 * jnp.real(
-        jnp.einsum('kci,kcj->ij', jnp.conj(dh_pos), dh_pos / psd_fd[1:, :, None])
+    ltt = jnp.asarray(ltt)
+    return _fisher_from_template(
+        lambda p: clean_signal_f_unequal(p, freq, ltt, tdi=tdi), params, psd_fd
     )
 
 

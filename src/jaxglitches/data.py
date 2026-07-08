@@ -80,7 +80,7 @@ jax.config.update("jax_enable_x64", True)
 
 def freq_grid(t_obs: float = T_OBS_s, dt: float = DT_s):
     """Return the one-sided rfft frequency grid for an observation of length t_obs."""
-    n = int(t_obs / dt)
+    n = round(t_obs / dt)   # int() would truncate, e.g. int(0.9999...e4) -> 9999
     return jnp.fft.rfftfreq(n, dt)
 
 
@@ -127,7 +127,8 @@ def clean_signal_f(params, freq, T: float = T_ARM_s, tdi: int = 1, basis: str = 
         raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
 
     h_fd = jnp.stack([c0, c1, c2], axis=-1)   # (F, 3)
-    return h_fd.at[0].set(0.0 + 0.0j)
+    # zero the DC bin wherever it sits (don't assume index 0 is f = 0)
+    return jnp.where(freq[:, None] > 0, h_fd, 0.0 + 0.0j)
 
 
 @partial(jax.jit, static_argnames=("tdi", "basis"))
@@ -288,7 +289,8 @@ def compute_TDI(raw_f, freq, T: float = T_ARM_s, tdi: int = 1, basis: str = "AET
         raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
 
     h_fd = jnp.stack([c0, c1, c2], axis=-1)             # (F, 3)
-    return h_fd.at[0].set(0.0 + 0.0j)
+    # zero the DC bin wherever it sits (don't assume index 0 is f = 0)
+    return jnp.where(freq[:, None] > 0, h_fd, 0.0 + 0.0j)
 
 
 # ── Unequal-arm TDI (numerical orbits, frozen-arm approximation) ──────────────
@@ -393,7 +395,8 @@ def clean_signal_f_unequal(params, freq, ltt, tdi: int = 1, basis: str = "AET"):
         raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
 
     h_fd = jnp.stack([c0, c1, c2], axis=-1)             # (F, 3)
-    return h_fd.at[0].set(0.0 + 0.0j)
+    # zero the DC bin wherever it sits (don't assume index 0 is f = 0)
+    return jnp.where(freq[:, None] > 0, h_fd, 0.0 + 0.0j)
 
 
 @partial(jax.jit, static_argnames=("tdi", "basis"))
@@ -472,4 +475,5 @@ def compute_TDI_unequal(raw_f, freq, ltt, tdi: int = 1, basis: str = "AET"):
         raise ValueError(f"basis must be 'AET' or 'XYZ', got {basis!r}")
 
     h_fd = jnp.stack([c0, c1, c2], axis=-1)             # (F, 3)
-    return h_fd.at[0].set(0.0 + 0.0j)
+    # zero the DC bin wherever it sits (don't assume index 0 is f = 0)
+    return jnp.where(freq[:, None] > 0, h_fd, 0.0 + 0.0j)

@@ -608,7 +608,7 @@ wheels = [
 [[package]]
 name = "jaxglitches"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "jax" },
     { name = "lisaglitch" },

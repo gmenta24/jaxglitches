@@ -110,8 +110,7 @@ class TestSamplePrior:
         assert jnp.all(jg.log_prior_sampling(xi, T_OBS) == 0.0)
 
 
-def test_default_t_obs_duplicated_constant():
-    """priors.T_OBS_s duplicates data.T_OBS_s — keep them in sync (see
-    review: consider a single shared constant)."""
+def test_default_t_obs_shared_constant():
+    """priors re-exports the single T_OBS_s defined in data.py."""
     from jaxglitches.data import T_OBS_s as data_t_obs
-    assert T_OBS_s == data_t_obs
+    assert T_OBS_s is data_t_obs
