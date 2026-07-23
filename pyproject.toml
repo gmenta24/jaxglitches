@@ -17,6 +17,7 @@ notebook = [
     "matplotlib",
     "scipy",
     "ipykernel",
+    "jexplore>=0.0.2",   # affine-invariant ensemble sampler (lisa.ipynb, orbits_comparison.ipynb §8)
 ]
 
 [build-system]
