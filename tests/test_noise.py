@@ -1,8 +1,8 @@
-"""Tests for the root-level noise.py: PSD relations, SNR invariance across
+"""Tests for notebooks/noise.py: PSD relations, SNR invariance across
 TDI generations, and frequency-domain noise sampling.
 
-Note: noise.py sits at the repository root (added to sys.path by conftest),
-not inside the jaxglitches package.
+Note: noise.py sits in notebooks/ (added to sys.path by conftest), not inside
+the jaxglitches package.
 """
 import jax.numpy as jnp
 import jax.random as jr
@@ -12,6 +12,7 @@ import jaxglitches as jg
 from jaxglitches.waveform import T_ARM_s, C_SI
 
 import noise as ns
+from conftest import T_OBS
 
 
 def test_psd_positive_and_finite(f_safe, psd1, psd2):
@@ -22,8 +23,9 @@ def test_psd_positive_and_finite(f_safe, psd1, psd2):
 
 def test_array_matches_tuple_form(f_safe):
     S_A, S_E, S_T = ns.psd_tdi1(f_safe)
-    arr = ns.psd_tdi1_array(f_safe)
-    assert jnp.array_equal(arr, jnp.stack([S_A, S_E, S_T], axis=-1))
+    arr = ns.psd_tdi1_array(f_safe, t_obs=T_OBS)
+    expected = ns.bin_variance(jnp.stack([S_A, S_E, S_T], axis=-1), T_OBS)
+    assert jnp.array_equal(arr, expected)
     assert jnp.array_equal(S_A, S_E)
 
 
@@ -44,29 +46,48 @@ def test_snr_invariant_across_tdi_generations(params, freq, psd1, psd2):
     assert jnp.isclose(snr1, snr2, rtol=1e-9)
 
 
-def test_psd_shape_characterization(f_safe, psd1):
-    """CHARACTERIZATION (see review): the A-channel PSD equals the standard
-    fractional-frequency TDI-1 AET PSD (Cornish & Robson conventions,
-    S_A = 8 sin^2 x [4(1+cx+cx^2) S_pm + (2+cx) S_op]) DIVIDED by
-    16 x^2 sin^2 x, with x = 2 pi f T. Equivalently it is a strain-like,
-    transfer-function-divided PSD, NOT the raw fractional-frequency TDI PSD
-    that the clean_signal_* templates live in. Internally self-consistent
-    (noise is sampled from the same PSD), but absolute SNRs are not physical
-    LISA SNRs until this is reconciled. If this test fails, the PSD
-    convention changed — update likelihood/SNR docs accordingly."""
+def test_psd_is_standard_fractional_frequency_tdi(f_safe):
+    """The PSD must be the standard equal-arm AET spectrum IN FRACTIONAL
+    FREQUENCY -- the same units the clean_signal_* templates live in.
+
+        S_A = 8 sin^2 x [4(1+cx+cx^2) S_pm + (2+cx) S_op]
+        S_T = 16 sin^2 x [2(1-cx)^2 S_pm + (1-cx) S_op]
+
+    Before 2026-07-29 this returned a strain-like PSD, i.e. the above divided
+    by 16 x^2 sin^2 x. That factor grows like f^4 across the band, so it did
+    not merely rescale the SNR -- it reweighted the analysis. If this test
+    fails the convention has regressed."""
     x = 2 * jnp.pi * f_safe * T_ARM_s
     A_amp, P_amp = 3e-15, 15e-12  # 3 fm/s^2, 15 pm (SciRD values)
     M_acc = (1 + (4e-4 / f_safe) ** 2) * (1 + (f_safe / 8e-3) ** 4)
     M_oms = 1 + (2e-3 / f_safe) ** 4
-    S_pm_ff = A_amp ** 2 * M_acc / (2 * jnp.pi * f_safe * C_SI) ** 2
-    S_op_ff = P_amp ** 2 * M_oms * (2 * jnp.pi * f_safe / C_SI) ** 2
+    S_pm = A_amp ** 2 * M_acc / (2 * jnp.pi * f_safe * C_SI) ** 2
+    S_op = P_amp ** 2 * M_oms * (2 * jnp.pi * f_safe / C_SI) ** 2
     cx = jnp.cos(x)
-    S_A_std = 8 * jnp.sin(x) ** 2 * (4 * (1 + cx + cx ** 2) * S_pm_ff
-                                     + (2 + cx) * S_op_ff)
-    sl = slice(10, None)
-    ratio = psd1[sl, 0] * (16 * x[sl] ** 2 * jnp.sin(x[sl]) ** 2) / S_A_std[sl]
-    finite = jnp.isfinite(ratio)  # sin x = 0 bins produce 0/0; skip them
-    assert bool(jnp.all(jnp.abs(ratio[finite] - 1) < 1e-10))
+    s2 = jnp.sin(x) ** 2
+    S_A_std = 8 * s2 * (4 * (1 + cx + cx ** 2) * S_pm + (2 + cx) * S_op)
+    S_T_std = 16 * s2 * (2 * (1 - cx) ** 2 * S_pm + (1 - cx) * S_op)
+
+    S_A, S_E, S_T = ns.psd_tdi1(f_safe)
+    assert jnp.allclose(S_A, S_A_std, rtol=1e-12)
+    assert jnp.allclose(S_T, S_T_std, rtol=1e-12)
+
+
+def test_bin_variance_is_half_tobs_times_psd(f_safe):
+    """The likelihood consumes a per-bin variance sigma_k^2 = (T_obs/2) S_1,
+    not the one-sided PSD. This is the factor that makes the matched-filter
+    SNR dimensionless."""
+    S = jnp.stack(ns.psd_tdi1(f_safe), axis=-1)
+    assert jnp.allclose(ns.bin_variance(S, T_OBS), 0.5 * T_OBS * S, rtol=1e-14)
+
+
+def test_psd_array_requires_t_obs(f_safe):
+    """t_obs is keyword-only and mandatory: a silent factor T_obs/2 in every
+    SNR is exactly the failure mode this guards against."""
+    with pytest.raises(TypeError):
+        ns.psd_tdi1_array(f_safe)
+    with pytest.raises(TypeError):
+        ns.psd_tdi2_array(f_safe)
 
 
 class TestSampleNoise:

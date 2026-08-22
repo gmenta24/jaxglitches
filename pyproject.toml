@@ -17,7 +17,20 @@ notebook = [
     "matplotlib",
     "scipy",
     "ipykernel",
-    "jexplore>=0.0.2",   # affine-invariant ensemble sampler (lisa.ipynb, orbits_comparison.ipynb §8)
+    "jexplore>=0.0.2",   # affine-invariant ensemble sampler (notebooks/*, e.g. glitch_only/orbits_comparison.ipynb §8)
+]
+# CUDA-enabled jaxlib. Nothing in the package needs changing to run on GPU --
+# these extras only pull the plugin that lets JAX see the device. Linux/x86_64
+# only, which is where NVIDIA publishes the wheels.
+#   gpu        -> CUDA 12 build, needs NVIDIA driver >= 525 (widest compatibility)
+#   gpu-cuda13 -> CUDA 13 build, needs NVIDIA driver >= 580
+# Pick the one matching `nvidia-smi`; installing the wrong one silently falls
+# back to CPU. Benchmarks in paper/validation were taken with gpu-cuda13.
+gpu = [
+    "jax[cuda12]>=0.10.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+gpu-cuda13 = [
+    "jax[cuda13]>=0.10.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [build-system]

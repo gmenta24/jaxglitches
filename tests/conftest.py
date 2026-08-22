@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-# noise.py lives at the repository root, outside the package.
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# noise.py lives in notebooks/, outside the package.
+NOISE_DIR = Path(__file__).resolve().parents[1] / "notebooks"
+if str(NOISE_DIR) not in sys.path:
+    sys.path.insert(0, str(NOISE_DIR))
 
 import jax.numpy as jnp  # noqa: E402  (jaxglitches enables x64 on import)
 import jaxglitches as jg  # noqa: E402
@@ -57,10 +57,10 @@ def unequal_ltt():
 @pytest.fixture(scope="session")
 def psd1(f_safe):
     import noise as ns
-    return ns.psd_tdi1_array(f_safe)
+    return ns.psd_tdi1_array(f_safe, t_obs=T_OBS)
 
 
 @pytest.fixture(scope="session")
 def psd2(f_safe):
     import noise as ns
-    return ns.psd_tdi2_array(f_safe)
+    return ns.psd_tdi2_array(f_safe, t_obs=T_OBS)

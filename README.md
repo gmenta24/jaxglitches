@@ -26,13 +26,36 @@ import).
   empirical LPF catalogue of Baghi et al. 2022,
   [arXiv:2112.07490](https://arxiv.org/abs/2112.07490)).
 
-Noise PSDs used by the notebooks live in `noise.py` at the repository root.
+Noise PSDs used by the notebooks live in `notebooks/noise.py`, outside the package.
 
 ## Install
 
 ```sh
 uv sync            # or: pip install -e .
 ```
+
+### GPU
+
+The package is pure JAX with no custom kernels, so the same code runs on GPU
+unchanged — you only need a CUDA-enabled `jaxlib`. Check your driver with
+`nvidia-smi` and install the matching extra:
+
+```sh
+uv sync --extra gpu           # CUDA 12 build, driver >= 525
+uv sync --extra gpu-cuda13    # CUDA 13 build, driver >= 580
+```
+
+Verify with `python -c "import jax; print(jax.devices())"`; if it prints
+`[CpuDevice(...)]` the plugin does not match the driver and JAX has silently
+fallen back to CPU.
+
+Everything stays in float64 on GPU. That matters here — the glitch phase
+`exp(-2i pi f t0)` with `t0` up to a year needs the full double mantissa — and it
+is not free on consumer hardware, where FP64 runs at a fraction of the FP32 rate.
+It turns out not to hurt: these kernels are memory-bound rather than FLOP-bound,
+and on an RTX 2000 Ada the template is ~5x faster than on 22 CPU cores for grids
+above 1e4 bins. The Hessian benefits far more (14.7x one likelihood on CPU
+vs 1.9x on GPU). See `paper/validation/03_benchmarks.ipynb`.
 
 ## Quick start
 

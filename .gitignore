@@ -26,3 +26,15 @@ htmlcov/
 Thumbs.db
 
 # uv lock
+
+# generated analysis artifacts (all regenerable from notebooks/)
+#   dataset.npz      <- notebooks/glitch_GB/make_dataset.py
+#   fd_chains.npz    <- notebooks/glitch_GB/glitch_and_gb.ipynb
+#   wdm_chain.npz    <- notebooks/glitch_GB/glitch_and_gb_wdm.ipynb
+#   gb_free_sky.npz  <- notebooks/glitch_GB/run_gb_free_sky.py
+#   ppruns/, pp_summary.npz <- notebooks/pp/run_ppplot.py
+notebooks/**/*.npz
+notebooks/pp/ppruns/
+
+# jexplore sampler epoch spill files
+epochs_*.h5
