@@ -7,9 +7,9 @@ import).
 ## What's inside
 
 - **Waveforms** (`jaxglitches.waveform`): analytic time- and frequency-domain
-  TDI-1/TDI-2 responses to a test-mass glitch on link 12, for one- and
-  two-exponential (integrated shapelet) templates — the LISA Pathfinder glitch
-  model of [lisaglitch](https://gitlab.in2p3.fr/lisa-simulation/glitch).
+  TDI-1/TDI-2 responses to a test-mass glitch on link 12, for the
+  one-exponential (integrated n=1 shapelet) template — the LISA Pathfinder
+  glitch model of [lisaglitch](https://gitlab.in2p3.fr/lisa-simulation/glitch).
 - **Signal builders** (`jaxglitches.data`): `clean_signal_f/t`, the raw
   (pre-TDI) single-link glitch, and numerical TDI application via
   frequency-domain delay operators. Unequal-arm variants (`*_unequal`) use the

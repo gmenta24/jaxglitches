@@ -38,3 +38,6 @@ notebooks/pp/ppruns/
 
 # jexplore sampler epoch spill files
 epochs_*.h5
+
+# paper draft (kept out of the package repo)
+paper/

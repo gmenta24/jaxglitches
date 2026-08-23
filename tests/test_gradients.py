@@ -54,22 +54,3 @@ def test_grad_clean_signal_t_finite_extreme_onset(times, tdi):
     g = jax.grad(lambda p: jnp.sum(jg.clean_signal_t(p, times, tdi=tdi) ** 2))(late)
     assert bool(jnp.all(jnp.isfinite(g)))
 
-
-@pytest.mark.parametrize("fn_name", ["tdi1_2exp_glitch", "tdi2_2exp_glitch"])
-def test_grad_2exp_td_finite_extreme_onset_and_equal_taus(times, fn_name):
-    """Two-exponential TD templates: gradients must stay finite both far
-    before onset (clamped exp) and at the tau1 == tau2 singular point
-    (continuous extension with a NaN-free unselected branch)."""
-    from jaxglitches import waveform
-    fn = getattr(waveform, fn_name)
-
-    def loss(theta):
-        X, Y, _ = fn(times, theta[0], theta[1], theta[2], theta[3])
-        return jnp.sum(X ** 2 + Y ** 2)
-
-    for theta in (jnp.array([3000.0, 1.2e-13, 0.5, 0.7]),   # extreme onset
-                  jnp.array([400.0, 1.2e-13, 5.0, 5.0])):   # equal taus
-        val = loss(theta)
-        g = jax.grad(loss)(theta)
-        assert bool(jnp.isfinite(val))
-        assert bool(jnp.all(jnp.isfinite(g)))
