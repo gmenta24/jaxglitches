@@ -19,6 +19,14 @@ notebook = [
     "ipykernel",
     "jexplore>=0.0.2",   # affine-invariant ensemble sampler (notebooks/*, e.g. glitch_only/orbits_comparison.ipynb §8)
 ]
+# The external LISA simulation chain, used only by the end-to-end validation
+# (paper/validation/04_end_to_end.ipynb and §5 of
+# notebooks/glitch_only/raw_and_tdi_tests.ipynb). Not a package dependency: it
+# pulls in dask/bokeh and nothing in jaxglitches imports it.
+simulation = [
+    "lisainstrument>=2.3.0",
+    "pytdi>=2.2.0",
+]
 # CUDA-enabled jaxlib. Nothing in the package needs changing to run on GPU --
 # these extras only pull the plugin that lets JAX see the device. Linux/x86_64
 # only, which is where NVIDIA publishes the wheels.

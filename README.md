@@ -76,3 +76,16 @@ h_un = jg.clean_signal_f_unequal(params, freq, jnp.asarray(ltt), tdi=1)
 ```sh
 uv run pytest
 ```
+
+The waveforms are also checked end to end against the external LISA simulation
+chain — a glitch injected with `lisaglitch`, propagated by `lisainstrument` and
+combined into Michelson TDI by `pytdi` — in
+`paper/validation/04_end_to_end.ipynb` and §5 of
+`notebooks/glitch_only/raw_and_tdi_tests.ipynb`. With every light travel time set
+to an integer number of samples nothing in the chain interpolates and the
+agreement is exact to 2e-15 across all six channels and both TDI generations.
+`lisainstrument` and `pytdi` are not package dependencies:
+
+```sh
+uv sync --extra notebook --extra simulation
+```

@@ -21,6 +21,7 @@ fixed A_g once the spectral knee approaches the band edge.
 """
 from __future__ import annotations
 
+import math
 import os
 import sys
 
@@ -141,9 +142,49 @@ def make_log_prior(coords: Coords, bounds: dict):
 # hybrid binned likelihood
 # ---------------------------------------------------------------------------
 
+def block_df_max(dt0, tau_max, eps_phi=0.05):
+    """Widest block for which the glitch phase drifts by less than `eps_phi` rad.
+
+    The glitch phase winds at  d arg h / df = -2 pi (t0 + 2 tau), so binning is
+    limited by how late the glitch arrives -- not by anything physical, since
+    |h(f)|, the SNR and the exact fine-grid likelihood are all independent of t0.
+    Heterodyning the data statistic at `t_ref` (see `build_hybrid`) replaces t0 by
+    t0 - t_ref, and the bound becomes
+
+        df_max = eps_phi / (2 pi (|t0 - t_ref| + 2 tau_max)) .
+
+    Pass `dt0 = t0` and leave `t_ref = 0` to recover the un-heterodyned bound.
+
+    `tau_max` is the largest decay time the sampler will visit, not the one at the
+    maximum: the heterodyne removes only the part of the phase that is linear in f,
+    so 2 tau survives it and sets a floor on how coarsely one may bin.
+    """
+    return float(eps_phi) / (2.0 * math.pi * (abs(float(dt0)) + 2.0 * float(tau_max)))
+
+
+def gen2(freqs):
+    """TDI-1 -> TDI-2 transfer, h^(2) = (1 - D^4) h^(1), for a signal at `freqs`."""
+    return 1.0 - jnp.exp(-4j * T_ARM * 2.0 * jnp.pi * freqs)
+
+
 def build_hybrid(grid, data_fd, psd, k_ref, model, n_gb, coords,
-                 buf=64, relw=0.005, df_max=5e-6):
-    """Hybrid likelihood: binned coarse grid (glitch only) + fine GB window."""
+                 buf=64, relw=0.005, df_max=5e-6, t_ref=0.0, tdi=1):
+    """Hybrid likelihood: binned coarse grid (glitch only) + fine GB window.
+
+    `tdi` selects the generation of the *templates*; `data_fd` and `psd` must be
+    supplied in the same generation. TDI-2 multiplies both signals by `gen2`, which
+    cancels against the matching factor in the PSD, so the two generations give the
+    same likelihood up to the binning -- that is the null test of Sec. "TDI-1 against
+    TDI-2".
+
+    `t_ref` heterodynes the block statistic, D_b -> sum_k d_k e^{+2 pi i f_k t_ref}/S_k,
+    and multiplies the model by the same factor, so that what has to be smooth across
+    a block is h(f) e^{+2 pi i f t_ref} rather than h(f) itself. It is algebraically a
+    no-op -- and numerically exact at t_ref = 0 -- but it lets `df_max` be set by how
+    well the onset is already localised instead of by how late it is. Use
+    `block_df_max` for the matching width. `t_ref` is baked into the precomputed
+    statistic, so it has to be fixed before sampling: take it from the MAP.
+    """
     freq, n_fine, df = grid["freq"], grid["n_fine"], grid["df"]
 
     k_lo = int(max(1, k_ref - buf))
@@ -166,7 +207,8 @@ def build_hybrid(grid, data_fd, psd, k_ref, model, n_gb, coords,
     in_win = (kk >= k_lo) & (kk < k_hi)
     inv_S = jnp.where(in_win[:, None], 0.0, 1.0 / psd)
     ssum = lambda v: jax.ops.segment_sum(v, seg, num_segments=nb_full)
-    W, D = ssum(inv_S), ssum(data_fd * inv_S)
+    het = jnp.exp(2j * jnp.pi * freq * t_ref)[:, None] if t_ref else 1.0
+    W, D = ssum(inv_S), ssum(data_fd * het * inv_S)
     X = ssum(jnp.abs(data_fd) ** 2 * inv_S)
     wf = jnp.sum(inv_S, axis=1)
     wsum = ssum(wf)
@@ -175,21 +217,32 @@ def build_hybrid(grid, data_fd, psd, k_ref, model, n_gb, coords,
     W, D, X, fbar = W[keep], D[keep], X[keep], fbar[keep]
     Xsum = jnp.sum(X)
     zero32 = jnp.zeros((), jnp.int32)
+    if tdi not in (1, 2):
+        raise ValueError(f"tdi must be 1 or 2, got {tdi!r}")
+    g2_coarse = gen2(fbar)[:, None] if tdi == 2 else 1.0
+    g2_win = gen2(freq_win)[:, None] if tdi == 2 else 1.0
 
     @jax.jit
     def log_lik(th):
         gb8, g3 = coords.to_physical(th)
-        hb = glitch_fd(g3, fbar)
+        hb = glitch_fd(g3, fbar) * g2_coarse
+        if t_ref:
+            hb = hb * jnp.exp(2j * jnp.pi * fbar * t_ref)[:, None]
         L_c = -(Xsum - 2.0 * jnp.sum(jnp.real(jnp.conj(hb) * D))
                 + jnp.sum(jnp.abs(hb) ** 2 * W))
         seg_gb, k_gb = gb_segment(model, n_gb, gb8)
         off = (k_gb - k_lo).astype(jnp.int32)
+        if tdi == 2:
+            # the binary lives at a dynamic slice of the window, so the transfer has
+            # to follow it rather than being applied to the fixed window grid
+            seg_gb = seg_gb * gen2(jax.lax.dynamic_slice(freq_win, (off,), (n_gb,)))[:, None]
         hw = jax.lax.dynamic_update_slice(
             jnp.zeros((n_win, 3), jnp.complex128), seg_gb, (off, zero32))
-        r = data_win - hw - glitch_fd(g3, freq_win)
+        r = data_win - hw - glitch_fd(g3, freq_win) * g2_win
         return L_c - jnp.sum((r.real ** 2 + r.imag ** 2) / psd_win)
 
-    return log_lik, dict(k_lo=k_lo, n_win=n_win, n_blocks=int(keep.sum()))
+    return log_lik, dict(k_lo=k_lo, n_win=n_win, n_blocks=int(keep.sum()),
+                         df_max=df_max, t_ref=float(t_ref), tdi=tdi)
 
 
 # ---------------------------------------------------------------------------
@@ -215,11 +268,41 @@ def run_chain(log_lik, log_prior, x0, sigma, dim, seed,
     return jnp.array(s.transpose(0, 2, 1).reshape(-1, dim))
 
 
-def laplace(log_post, x0, fallback):
-    """One Newton step plus the Laplace width, with a guard for stiff directions."""
-    g = jax.grad(log_post)(x0)
-    H = jax.hessian(log_post)(x0)
-    xmap = x0 - jnp.linalg.solve(H, g)
+def laplace(log_post, x0, fallback, n_steps=8, tol=1e-3, return_steps=False):
+    """Newton to the maximum, plus the Laplace width there.
+
+    One step is *not* enough on this posterior, which is why this iterates. The
+    (log f0, log fdot) block is ill-conditioned -- cond(H) ~ 1e17 at the fiducial
+    injection -- so an undamped step overshoots: from the injected values it lands
+    at a log-posterior some 30 below where it started, and only recovers over the
+    following steps. Each step is therefore backtracked until it does not decrease
+    the posterior, and the iteration stops when the accepted step is below `tol`
+    times the Laplace width. See `run_convergence.py`, which measures all of this.
+
+    Note that the covariance returned is the curvature at the *maximum*, which is
+    not the same thing as the Fisher matrix at the injected truth: the paper quotes
+    the latter when it compares a forecast against a chain, and the two differ by
+    more than they sound like they should along the curved degeneracy.
+    """
+    grad = jax.jit(jax.grad(log_post))
+    hess = jax.jit(jax.hessian(log_post))
+    x, used = x0, 0
+    for k in range(n_steps):
+        g, H = grad(x), hess(x)
+        step = -jnp.linalg.solve(H, g)
+        if not bool(jnp.all(jnp.isfinite(step))):
+            break
+        sig = jnp.sqrt(jnp.abs(jnp.diag(-jnp.linalg.inv(H))))
+        f0, t = float(log_post(x)), 1.0
+        for _ in range(30):
+            if float(log_post(x + t * step)) >= f0:
+                break
+            t *= 0.5
+        x, used = x + t * step, k + 1
+        if float(jnp.max(jnp.abs(t * step / sig))) < tol:
+            break
+    H = hess(x)
     sig = jnp.sqrt(jnp.abs(jnp.diag(-jnp.linalg.inv(H))))
     ok = jnp.isfinite(sig) & (sig > 1e-12) & (sig < 1e3)
-    return jnp.where(jnp.isfinite(xmap), xmap, x0), jnp.where(ok, sig, fallback)
+    out = jnp.where(jnp.isfinite(x), x, x0), jnp.where(ok, sig, fallback)
+    return out + (used,) if return_steps else out
