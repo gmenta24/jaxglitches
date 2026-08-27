@@ -77,10 +77,24 @@ def split_rhat(samples):
     return float(np.sqrt(var_plus / within))
 
 
-def acceptance(samples):
+def acceptance(samples, thin=1):
     """Fraction of proposals accepted, read off the chain: a Metropolis rejection
-    repeats the previous sample exactly."""
-    return float(np.mean(np.any(np.diff(samples, axis=0) != 0.0, axis=-1)))
+    repeats the previous sample exactly.
+
+    On a chain stored with a stride the reading has to be undone. Over `thin`
+    iterations the stored pair differs unless every one of them was rejected, so the
+    observed rate is p_obs = 1 - (1 - p)^thin and p = 1 - (1 - p_obs)^(1/thin). The
+    inversion assumes the rejections are independent, which a stretch move does not
+    quite satisfy; measured against the unthinned `fd_chains.npz` it is good to 2%
+    at thin = 10 and useless by thin = 20, so it refuses to guess once p_obs has
+    saturated.
+    """
+    p_obs = float(np.mean(np.any(np.diff(samples, axis=0) != 0.0, axis=-1)))
+    if thin == 1:
+        return p_obs
+    if p_obs > 0.999:
+        return float("nan")
+    return 1.0 - (1.0 - p_obs) ** (1.0 / thin)
 
 
 def unflatten(flat, n_walker=N_WALKERS):
@@ -105,10 +119,16 @@ def cross_walker_corr(chain):
                           for w in range(1, x.shape[1])]))
 
 
-def diagnose(flat, labels, n_walker=N_WALKERS):
-    """Diagnostics for a flat (n_walker * n_iter, dim) chain."""
+def diagnose(flat, labels, n_walker=N_WALKERS, thin=1, acceptance_exact=None):
+    """Diagnostics for a flat (n_walker * n_iter, dim) chain.
+
+    `thin` is the stride the chain was stored with. The effective sample size is
+    invariant under thinning -- both n and tau scale together -- but tau itself and
+    the iteration count have to be put back into sampler iterations, and the
+    acceptance fraction has to be inverted (see `acceptance`).
+    """
     n_total, dim = flat.shape
-    n_iter = n_total // n_walker
+    n_iter = (n_total // n_walker) * thin
     chain = unflatten(flat, n_walker)
     cross = cross_walker_corr(chain)
     if abs(cross) > 0.2:
@@ -117,14 +137,16 @@ def diagnose(flat, labels, n_walker=N_WALKERS):
             "probably not laid out the way `unflatten` assumes")
     out = {k: np.zeros(dim) for k in ("tau", "ess", "rhat", "sigma", "median", "se_median")}
     for i in range(dim):
-        out["tau"][i], _ = tau_int(chain[:, :, i])
-        out["ess"][i] = n_total / out["tau"][i]
+        tau_stored, _ = tau_int(chain[:, :, i])
+        out["tau"][i] = tau_stored * thin          # in sampler iterations
+        out["ess"][i] = n_total / tau_stored       # invariant under thinning
         out["rhat"][i] = split_rhat(chain[:, :, i])
         out["sigma"][i] = flat[:, i].std()
         out["median"][i] = np.median(flat[:, i])
         # standard error of a median for a roughly Gaussian marginal
         out["se_median"][i] = np.sqrt(np.pi / 2) * out["sigma"][i] / np.sqrt(out["ess"][i])
-    out["acceptance"] = acceptance(chain)
+    out["acceptance"] = (acceptance(chain, thin) if acceptance_exact is None
+                         else acceptance_exact)
     out["cross_walker"] = cross
     out["n_iter"], out["n_walker"], out["labels"] = n_iter, n_walker, labels
     return out
@@ -252,8 +274,15 @@ def main():
         ("frequency domain, exact grid", diagnose(wdm["chain_fd"], labels)),
         ("time--frequency, TDI-1", diagnose(wdm["chain"], labels)),
         ("time--frequency, TDI-2", diagnose(tdi2["chain2"], labels)),
-        ("frequency domain, sky free", diagnose(sky["free_chain"],
-                                                [str(x) for x in sky["free_names"]], 32)),
+        ("frequency domain, sky free",
+         diagnose(sky["free_chain"], [str(x) for x in sky["free_names"]],
+                  int(sky["nwalkers"]) if "nwalkers" in sky.files else 32,
+                  int(sky["thin"]) if "thin" in sky.files else 1,
+                  # measured on the unthinned chain by run_gb_free_sky.py; the
+                  # inversion in `acceptance` assumes independent rejections, which
+                  # is poor when tau_int reaches 2000, so prefer the stored value
+                  float(sky["free_acceptance"]) if "free_acceptance" in sky.files
+                  else None)),
     ]
     for name, d in rows:
         report(name, d)

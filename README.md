@@ -89,3 +89,26 @@ agreement is exact to 2e-15 across all six channels and both TDI generations.
 ```sh
 uv sync --extra notebook --extra simulation
 ```
+
+### Optional extras, and what needs them
+
+`jaxglitches` itself depends only on `jax`, `numpy`, `lisaglitch` and
+`lisaorbits`. Everything else the repository uses is an extra, because nothing
+under `src/jaxglitches` imports it and the test suite does not need it:
+
+| Extra | Pulls in | Needed by |
+|---|---|---|
+| `notebook` | matplotlib, scipy, ipykernel, nbconvert, jexplore | every notebook |
+| `joint` | `jaxgb` | `notebooks/glitch_GB/*` — the Galactic binary the glitch is fitted alongside |
+| `wdm` | `wdm-transform[jax]` | the time–frequency analyses in `notebooks/glitch_GB/` |
+| `simulation` | lisainstrument, pytdi | the end-to-end validation above |
+| `gpu` / `gpu-cuda13` | CUDA `jaxlib` | running on a GPU |
+
+So to reproduce the paper's joint analysis:
+
+```sh
+uv sync --extra notebook --extra joint --extra wdm
+```
+
+and to use the waveforms and the likelihood on their own, `uv sync` alone is
+enough.

@@ -33,9 +33,12 @@ Thumbs.db
 #   wdm_chain.npz    <- notebooks/glitch_GB/glitch_and_gb_wdm.ipynb
 #   gb_free_sky.npz  <- notebooks/glitch_GB/run_gb_free_sky.py
 #   ppruns/, pp_summary.npz <- notebooks/pp/run_ppplot.py
+#   decruns/, decimation_summary.npz <- notebooks/pp/run_decimation.py
 #   comparison_runs/, glitch_comparison.npz <- notebooks/glitch_only/glitch_comparison.py
+#   knee_scan.npz, knee_mcmc.npz, lpf_snr.npz <- notebooks/glitch_GB/run_knee_scan.py
 notebooks/**/*.npz
 notebooks/pp/ppruns/
+notebooks/pp/decruns/
 notebooks/glitch_only/comparison_runs/
 
 # jexplore sampler epoch spill files

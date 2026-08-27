@@ -28,14 +28,39 @@ REPO_ROOT = os.path.dirname(NOTEBOOKS)
 
 RUNDIR = os.path.join(HERE, "ppruns")
 
+_PINNED = False
+
+
+def _pin_to_one_core():
+    """One core per worker.
+
+    The environment variables below are necessary and not sufficient: XLA still starts
+    a thread pool per process, and 20 workers x 22 threads drives the load average past
+    the core count and the throughput to nearly zero. Pinning the process to a single
+    core is what actually enforces it. See notebooks/glitch_only/glitch_comparison.py.
+    """
+    global _PINNED
+    if _PINNED:
+        return
+    _PINNED = True
+    try:
+        import multiprocessing as mp
+        ident = mp.current_process()._identity
+        cores = sorted(os.sched_getaffinity(0))
+        if ident and cores:
+            os.sched_setaffinity(0, {cores[(ident[0] - 1) % len(cores)]})
+    except (AttributeError, OSError, IndexError):
+        pass
+
 
 def worker(idx: int) -> dict:
-    """One realisation, end to end. Runs in its own single-threaded CPU process."""
+    """One realisation, end to end. Runs in its own single-core CPU process."""
     os.environ["JAX_PLATFORMS"] = "cpu"
     os.environ["XLA_FLAGS"] = ("--xla_cpu_multi_thread_eigen=false "
                                "intra_op_parallelism_threads=1")
     for v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         os.environ[v] = "1"
+    _pin_to_one_core()
     for p in (NOTEBOOKS, GLITCH_GB):
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -92,6 +117,11 @@ def worker(idx: int) -> dict:
     ch = np.asarray(chain)
     q = [(ch[:, i] < float(th[i])).mean() for i in range(co.dim)]
 
+    # `q` above is computed in float64, before the cast, and is what the P--P plot
+    # uses. The stored chain is float32 to keep 100 of them on disk, and that is lossy
+    # for `log_f0`: its width is ~1e-7 at a value of -6.2, below the float32 resolution
+    # there, so the marginal comes back quantised into a handful of levels. Re-derive
+    # log_f0 statistics from `quantiles`, not from `chain`.
     np.savez_compressed(done, chain=ch.astype(np.float32),
                         theta_true=np.asarray(th), quantiles=np.array(q),
                         snr_gb=snr_gb, snr_gl=snr_gl, names=np.array(co.names))

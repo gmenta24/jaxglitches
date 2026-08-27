@@ -9,7 +9,6 @@ dependencies = [
     "lisaglitch>=2.0.0",
     "lisaorbits>=3.0.0",
     "numpy>=1.24",
-    "wdm-transform[jax]>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -17,7 +16,19 @@ notebook = [
     "matplotlib",
     "scipy",
     "ipykernel",
+    "nbconvert",         # `jupyter nbconvert --execute` re-runs the notebooks in place
     "jexplore>=0.0.2",   # affine-invariant ensemble sampler (notebooks/*, e.g. glitch_only/orbits_comparison.ipynb §8)
+]
+# Galactic-binary waveforms and the wavelet transform. Neither is a package
+# dependency: nothing under src/jaxglitches imports them and the test suite does not
+# need them. They are what `notebooks/glitch_GB/` requires -- `jaxgb` for the binary
+# the glitch is fitted alongside, `wdm-transform` for the time--frequency tiling --
+# so they are extras rather than something every user of the waveforms has to install.
+joint = [
+    "jaxgb>=0.2.2",             # notebooks/glitch_GB/*: fast frequency-domain GB response
+]
+wdm = [
+    "wdm-transform[jax]>=0.5.0",  # notebooks/glitch_GB/glitch_and_gb_wdm.ipynb, run_wdm_tdi2.py
 ]
 # The external LISA simulation chain, used only by the end-to-end validation
 # (paper/validation/04_end_to_end.ipynb and §5 of

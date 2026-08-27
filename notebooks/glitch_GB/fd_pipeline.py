@@ -245,9 +245,104 @@ def build_hybrid(grid, data_fd, psd, k_ref, model, n_gb, coords,
                          df_max=df_max, t_ref=float(t_ref), tdi=tdi)
 
 
+def build_decimated(grid, data_fd, psd, K, model, n_gb, coords, tdi=1, k_first=1):
+    """The tempting cheap alternative to binning: keep every K-th bin, scale by K.
+
+        log L_K(theta) = -K sum_{k in S_K} |d_k - h_k|^2 / S_k
+
+    This exists so that the argument of Sec. "Why binning and not decimation" can be
+    measured rather than asserted. Both give the same Fisher information -- the
+    prefactor K compensates the 1/K retained terms -- so the posterior comes out the
+    right width. What decimation breaks is the noise: the score picks up K twice in its
+    variance and once in the information, so the maximum scatters about the truth by
+    sqrt(K) posterior widths instead of one. Run through the P--P machinery it produces
+    credible intervals that look healthy and fail to cover.
+
+    The retained set is k = k_first, k_first + K, ... The DC bin is excluded, as
+    everywhere else.
+
+    The Galactic binary is the only awkward part. Its model returns `n_gb` *contiguous*
+    bins starting at a k_min that moves with f0, so the retained bins that land on it
+    are a contiguous run in the decimated index whose offset is dynamic. Rather than
+    scattering into a full-length array (which would cost exactly the O(N) this is
+    supposed to avoid), the segment is gathered at the local offsets
+    `k_first + K*m - k_min` and dynamically placed, which is O(n_gb / K).
+    """
+    freq, n_fine = grid["freq"], grid["n_fine"]
+    idx = jnp.arange(k_first, n_fine, K)
+    n_dec = int(idx.shape[0])
+    freq_d, data_d, psd_d = freq[idx], data_fd[idx], psd[idx]
+    zero32 = jnp.zeros((), jnp.int32)
+
+    # widest run of retained bins the GB segment can cover, plus one for the offset
+    n_win = n_gb // K + 2
+    j = jnp.arange(n_win)
+
+    if tdi not in (1, 2):
+        raise ValueError(f"tdi must be 1 or 2, got {tdi!r}")
+    g2_d = gen2(freq_d)[:, None] if tdi == 2 else 1.0
+
+    @jax.jit
+    def log_lik(th):
+        gb8, g3 = coords.to_physical(th)
+        seg, k_gb = gb_segment(model, n_gb, gb8)                  # (n_gb, 3), scalar
+        # first retained index at or beyond k_gb, and the local offsets it implies
+        m0 = jnp.ceil((k_gb - k_first) / K).astype(jnp.int32)
+        local = k_first + K * (m0 + j) - k_gb                     # (n_win,)
+        ok = (local >= 0) & (local < n_gb)
+        vals = jnp.take(seg, jnp.clip(local, 0, n_gb - 1), axis=0) * ok[:, None]
+        h = jax.lax.dynamic_update_slice(
+            jnp.zeros((n_dec, 3), jnp.complex128), vals,
+            (jnp.clip(m0, 0, n_dec - n_win), zero32))
+        h = h * g2_d + glitch_fd(g3, freq_d) * g2_d
+        r = data_d - h
+        return -K * jnp.sum((r.real ** 2 + r.imag ** 2) / psd_d)
+
+    return log_lik, dict(K=K, n_dec=n_dec, n_fine=n_fine, tdi=tdi, k_first=k_first)
+
+
 # ---------------------------------------------------------------------------
 # sampler
 # ---------------------------------------------------------------------------
+
+def _pull_inside(p0, x0, log_prior, n_halve=40):
+    """Guarantee every walker starts inside the prior support.
+
+    A stretch move between two walkers that both sit outside the support has
+    acceptance ratio -inf - (-inf) = NaN, which compares false and is rejected for
+    ever. An ensemble that starts with most of its walkers outside can therefore
+    freeze completely, and it does so silently: the chain has the right shape and
+    every sample is the walker's starting point. It happened for a handful of the
+    P--P realisations of Sec. "Are the credible intervals credible?", the ones where
+    the glitch is too faint to curve the posterior, so that the Laplace width comes
+    back wider than the prior box and a ball of `ball` times it straddles the walls.
+
+    Offending walkers are pulled back along their own offset from `x0` rather than
+    clipped to the wall, which would pile them up on a face of the box and destroy
+    the ensemble's spread in that direction. Walkers that are already valid are left
+    bit-identical, so this is a no-op for every run that was not broken.
+    """
+    lp = np.asarray(jax.vmap(log_prior)(p0))
+    bad = ~np.isfinite(lp)
+    if not bad.any():
+        return p0
+    if not np.isfinite(float(log_prior(x0))):
+        raise ValueError("starting point is outside the prior support")
+    p = np.array(p0, dtype=float)
+    x = np.asarray(x0, dtype=float)
+    for w in np.flatnonzero(bad):
+        d = p[w] - x
+        for _ in range(n_halve):
+            d = 0.5 * d
+            if np.isfinite(float(log_prior(jnp.asarray(x + d)))):
+                break
+        else:
+            d = np.zeros_like(d)
+        p[w] = x + d
+    print(f"    run_chain: pulled {int(bad.sum())}/{len(p)} walkers back inside the "
+          f"prior support")
+    return jnp.asarray(p)
+
 
 def run_chain(log_lik, log_prior, x0, sigma, dim, seed,
               nwalkers=16, nburn=2000, nsamp=10000, ball=0.01):
@@ -261,6 +356,7 @@ def run_chain(log_lik, log_prior, x0, sigma, dim, seed,
     steps = Steps([{Stretch(permute=True).builder: 1.0}])
     p0 = x0 + jr.multivariate_normal(jr.PRNGKey(seed), jnp.zeros(dim),
                                      jnp.diag(sigma ** 2) * ball, shape=(nwalkers,))
+    p0 = _pull_inside(p0, x0, log_prior)
     backend = DefaultBackend(burn=nburn, inmem_epochs=1)
     JaxSampler(sampling, steps, backend).run(EpochMH({"p": p0}),
                                              niters=nburn + nsamp, nepoch=1, seed=seed)
