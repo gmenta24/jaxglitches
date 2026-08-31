@@ -36,6 +36,7 @@ Thumbs.db
 #   decruns/, decimation_summary.npz <- notebooks/pp/run_decimation.py
 #   comparison_runs/, glitch_comparison.npz <- notebooks/glitch_only/glitch_comparison.py
 #   knee_scan.npz, knee_mcmc.npz, lpf_snr.npz <- notebooks/glitch_GB/run_knee_scan.py
+#   unequal_vs_equal.npz <- notebooks/glitch_only/unequal_vs_equal_arm.ipynb
 notebooks/**/*.npz
 notebooks/pp/ppruns/
 notebooks/pp/decruns/

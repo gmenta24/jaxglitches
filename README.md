@@ -77,6 +77,15 @@ h_un = jg.clean_signal_f_unequal(params, freq, jnp.asarray(ltt), tdi=1)
 uv run pytest
 ```
 
+`notebooks/glitch_only/unequal_vs_equal_arm.ipynb` goes one step further and asks
+what the equal-arm approximation *costs*: it injects with the six frozen delays of a
+Keplerian constellation, fits with the equal-arm template, and measures the resulting
+bias over a year of epochs. Appendix B of the paper reports the answer. Two findings
+are worth knowing before reusing that code — the T channel stops being null once the
+arms are unequal, so the equal-arm `S_T` of `notebooks/noise.py` must not be used with
+an unequal-arm signal; and the equal-arm `T` an analyst picks matters, the epoch's mean
+delay being a factor four better than the design value.
+
 The waveforms are also checked end to end against the external LISA simulation
 chain — a glitch injected with `lisaglitch`, propagated by `lisainstrument` and
 combined into Michelson TDI by `pytdi` — in
