@@ -27,16 +27,25 @@ across analyses and not merely their widths; see Sec. "What the split costs".
 | `run_wdm_tdi2.py` | does the time--frequency split depend on the TDI generation? | `wdm_tdi2.npz` | ~1 h, GPU |
 | `run_knee_scan.py` | how far from the fiducial configuration does the glitch/binary separation survive? | `knee_scan.npz`, `knee_mcmc.npz`, `fig_knee_scan.pdf` | ~40 min, GPU |
 | `run_lpf_snr.py` | how loud are LPF-like glitches, seen by LISA on this grid? | `lpf_snr.npz` | ~2 min |
+| `run_unmodelled.py` | what breaks if the glitch is *not* modelled, in each representation? | `unmodelled.npz`, `fig_unmodelled.pdf` | ~2 h, GPU |
 | `combine_knee_lpf.py` | how often does the population reach its own bias threshold? | — (prints) | seconds |
 | `run_convergence.py` | are the chains converged, and has the Newton step? | `convergence.npz`, `tab_convergence.tex` | ~2 min |
 | `make_fig_wdm_tdi.py` | — | `fig_wdm_tdi.pdf` | seconds |
 | `make_corner_wdm_vs_fd.py` | — | `fig_wdm_corner.pdf` | seconds |
 | `make_fig_fd.py` | — | `fig_corner.pdf`, `fig_residual.pdf` | seconds |
+| `make_fig_unmodelled.py` | — | `fig_unmodelled.pdf` | seconds |
 
 `../pp/run_ppplot.py` and `../pp/run_decimation.py` share `fd_pipeline.py` too: the
 first calibrates the hybrid binned likelihood over 100 realisations, the second runs
 the same realisations through the decimated likelihood of `fd_pipeline.build_decimated`
 to show what a stride costs. Both are CPU-parallel and resumable; ~2 h on 20 cores.
+
+`run_unmodelled.py` runs in five phases, each in its own process for the same reason
+as `run_wdm_tdi2.py`: `probe` (window geometry, the excision trade-off, the linearised
+bias), `ladder` (bias against glitch amplitude), `scatter` and `scattercrit` (24 noise
+draws each, at 4 rho_crit and at rho_crit, to tell a bias from a draw) and `chains` (the
+posteriors themselves). `merge` collects them, `figure` draws. It is the script that
+found the blind spot in the split likelihood described below.
 
 `run_knee_scan.py` has five modes, and the ones that are not the scan matter as much
 as the scan: `--check` verifies that the degradation and correlation it reports are
@@ -55,7 +64,19 @@ reshape is `(n_walker, n_iter, dim)`. Reading it the other way round makes walke
 look correlated at 0.8 and shrinks every autocorrelation time by an order of
 magnitude; `run_convergence.py` checks the layout before trusting it.
 
-## Four results worth knowing before reusing this code
+## Five results worth knowing before reusing this code
+
+**The split likelihood never subtracts the glitch from the binary's window.** Eq. (38)
+of the paper models `W_GB` with `h_GB` and `W_gl` with `h_gl`, and that is what makes
+the posterior factorise. It also means a *joint* WDM fit carries exactly the same
+systematic as a frequency-domain fit that omits the glitch altogether — the glitch is
+estimated, but not where the binary is measured. At the fiducial amplitude this is
+invisible (the glitch puts SNR 0.67 into `W_GB` against the binary's 283), which is why
+nothing in `glitch_and_gb_wdm.ipynb` shows it. `run_unmodelled.py` turns the glitch up
+and it appears. Two repairs work and both are in that script: model `W_GB` with
+`h_GB + h_gl` (`wdm_sub`, exact, one extra transform per call), or excise the time bins
+carrying the onset (`wdm_cut`, needs no glitch model at all, costs a few per cent of the
+binary's SNR).
 
 **One Newton step is not enough.** The `(log f0, log fdot)` block is ill-conditioned
 (cond(H) ≈ 1e17), so an undamped step from the injected values overshoots to a

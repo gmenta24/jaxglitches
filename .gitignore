@@ -37,7 +37,9 @@ Thumbs.db
 #   comparison_runs/, glitch_comparison.npz <- notebooks/glitch_only/glitch_comparison.py
 #   knee_scan.npz, knee_mcmc.npz, lpf_snr.npz <- notebooks/glitch_GB/run_knee_scan.py
 #   unequal_vs_equal.npz <- notebooks/glitch_only/unequal_vs_equal_arm.ipynb
+#   unmodelled*.npz  <- notebooks/glitch_GB/run_unmodelled.py
 notebooks/**/*.npz
+notebooks/**/*.log
 notebooks/pp/ppruns/
 notebooks/pp/decruns/
 notebooks/glitch_only/comparison_runs/
