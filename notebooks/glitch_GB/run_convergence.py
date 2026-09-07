@@ -267,6 +267,7 @@ def main():
     tdi2 = np.load(HERE / "wdm_tdi2.npz")
     sky = np.load(HERE / "gb_free_sky.npz")
     labels = [str(x) for x in fd["labels"]]
+    unm = np.load(HERE / "unmodelled.npz", allow_pickle=True)
 
     rows = [
         ("frequency domain, TDI-1", diagnose(fd["chain1"], labels)),
@@ -284,6 +285,17 @@ def main():
                   float(sky["free_acceptance"]) if "free_acceptance" in sky.files
                   else None)),
     ]
+    # The five chains of Sec. "Leaving the glitch out". They are run on a louder
+    # glitch than everything above, and the glitch-free ones are the only chains in
+    # the paper sampling a posterior whose curvature at the injection is not negative
+    # definite, so their diagnostics are worth more than a formality.
+    rows += [(name, diagnose(unm[f"chain_{key}"], labels[:unm[f"chain_{key}"].shape[1]]))
+             for name, key in [
+                 ("unmodelled test, joint", "fd_joint"),
+                 ("unmodelled test, glitch omitted", "fd_gbonly"),
+                 ("unmodelled test, WDM split", "wdm_split"),
+                 ("unmodelled test, WDM {+}$h^{\\rm gl}$", "wdm_sub"),
+                 ("unmodelled test, WDM excised", "wdm_cut")]]
     for name, d in rows:
         report(name, d)
 

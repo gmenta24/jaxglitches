@@ -94,7 +94,13 @@ HEADLINE = 4.0                     # the rung the chains and the scatter test us
 N_REALISATIONS = 24
 EXCISE_HALF = 3                    # time bins dropped either side of the onset
 
-N_WALKERS, N_BURN, N_SAMP = 16, 2_000, 10_000
+N_WALKERS = 16
+# Overridable so that a chain whose diagnostics come back marginal can be re-run longer
+# without disturbing the ones that were fine. The glitch-free posteriors of this section
+# mix worse than anything else in the paper -- their curvature at the injection is not
+# negative definite -- and needed it.
+N_BURN = int(os.environ.get("UNMODELLED_NBURN", 2_000))
+N_SAMP = int(os.environ.get("UNMODELLED_NSAMP", 10_000))
 GB_LABELS = ["log_f0", "log_fdot", "log_A_gb", "psi"]
 ALL_LABELS = GB_LABELS + ["t0", "log_Ag", "log_tau"]
 ANALYSES = ("fd_joint", "fd_gbonly", "wdm_split", "wdm_sub", "wdm_gbonly", "wdm_cut")
@@ -660,18 +666,32 @@ def run_chain(log_lik, x0, sigma, dim, seed):
     return np.asarray(jnp.array(s.transpose(0, 2, 1).reshape(-1, dim)))
 
 
-def phase_chains():
-    """The posteriors themselves, at the headline amplitude, on the stored noise draw."""
+def phase_chains(only=None):
+    """The posteriors themselves, at the headline amplitude, on the stored noise draw.
+
+    `only` re-runs a subset and merges the result into the stored file, leaving the
+    other chains bit-identical. Used to lengthen the two whose diagnostics came back
+    marginal without paying for the three that did not.
+    """
     rho_crit = float(np.load(_out("probe"))["rho_crit_fid"])
     scale = HEADLINE * rho_crit / RHO_GL1
     dv = scale * DELTAV_TRUE
     data = data_at(scale)
     print(f"rho_gl = {HEADLINE * rho_crit:.0f} = {HEADLINE:g} rho_crit, "
           f"Deltav = {dv:.3e} m/s, rho_GB = {RHO_GB:.1f}")
+    print(f"sampler: {N_WALKERS} walkers, {N_BURN} burn + {N_SAMP} samples")
     out = {"chain_rho_gl": HEADLINE * rho_crit, "chain_deltav": dv}
     # wdm_gbonly is omitted: `probe` shows it reproduces fd_gbonly to 1e-4 sigma, so a
     # second 40-minute chain of the same posterior would buy nothing.
-    for name in [a for a in ANALYSES if a != "wdm_gbonly"]:
+    names = [a for a in ANALYSES if a != "wdm_gbonly"]
+    if only:
+        prev = _out("chains")
+        if not prev.exists():
+            raise FileNotFoundError(f"{prev} missing -- run the full phase first")
+        out = dict(np.load(prev, allow_pickle=True))
+        names = list(only)
+        print(f"re-running only {names}; the rest are carried over unchanged")
+    for name in names:
         log_lik, dim = BUILDERS[name](data)
         lp = PRIOR[dim]
         log_post = jax.jit(lambda th: log_lik(th) + lp(th))
@@ -748,7 +768,12 @@ def main():
             return make_fig_unmodelled.main()
         if phase not in PHASES:
             raise SystemExit(f"phase must be one of {PHASES + ('merge', 'figure')}")
-        np.savez_compressed(_out(phase), **globals()[f"phase_{phase}"]())
+        extra = sys.argv[2:]
+        if extra and phase != "chains":
+            raise SystemExit("only `chains` takes a list of analyses")
+        res = phase_chains(extra) if phase == "chains" and extra \
+            else globals()[f"phase_{phase}"]()
+        np.savez_compressed(_out(phase), **res)
         print(f"saved {_out(phase)}")
         return
     for phase in PHASES:
