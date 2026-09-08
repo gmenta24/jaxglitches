@@ -45,6 +45,18 @@ import noise as ns  # noqa: E402
 T_ARM = jg.T_ARM_s
 
 # ---------------------------------------------------------------------------
+# seeds
+# ---------------------------------------------------------------------------
+# `../pp/run_ppplot.py` and `../pp/run_decimation.py` must analyse *the same*
+# realisations: the second measures what a decimation stride costs on the data the
+# first calibrated the likelihood on, so if the two drifted apart they would be
+# comparing different experiments while looking as if they were not. The bases
+# therefore live in the module both of them import, rather than as a matched pair
+# of literals in two files.
+SEED_TRUTH = 10_000      # np.random.default_rng(SEED_TRUTH + idx) -- injected truth
+SEED_NOISE = 500_000     # jr.PRNGKey(SEED_NOISE + idx)            -- noise draw
+
+# ---------------------------------------------------------------------------
 # grid and models
 # ---------------------------------------------------------------------------
 

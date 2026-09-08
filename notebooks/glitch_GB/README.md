@@ -29,7 +29,7 @@ across analyses and not merely their widths; see Sec. "What the split costs".
 | `run_lpf_snr.py` | how loud are LPF-like glitches, seen by LISA on this grid? | `lpf_snr.npz` | ~2 min |
 | `run_unmodelled.py` | what breaks if the glitch is *not* modelled, in each representation? | `unmodelled.npz`, `fig_unmodelled.pdf` | ~2 h, GPU |
 | `combine_knee_lpf.py` | how often does the population reach its own bias threshold? | — (prints) | seconds |
-| `run_convergence.py` | are the chains converged, and has the Newton step? | `convergence.npz`, `tab_convergence.tex` | ~2 min |
+| `run_convergence.py` | are the chains converged, and has the Newton step? | `convergence.npz`, `tab_convergence.tex` | ~20 s, CPU |
 | `make_fig_wdm_tdi.py` | — | `fig_wdm_tdi.pdf` | seconds |
 | `make_corner_wdm_vs_fd.py` | — | `fig_wdm_corner.pdf` | seconds |
 | `make_fig_fd.py` | — | `fig_corner.pdf`, `fig_residual.pdf` | seconds |
@@ -117,3 +117,38 @@ before quoting any width from a single start.
 would be quantised into a handful of levels. Everything here stores float64. The
 quantiles in `../pp/pp_summary.npz` were computed before the cast and are unaffected,
 but the chains stored under `../pp/ppruns/` carry this limitation.
+
+## Regenerating the figures
+
+None of the figures here need the sampler re-run: each `make_fig_*.py` reads the
+stored `.npz` and draws in seconds. Those `.npz` files are gitignored, so they exist
+only in a working copy — which is what makes recording their hashes worth doing. The
+index of which producer makes which figure, what it reads, and how long it costs is
+`../../paper/make_figures.py`:
+
+```sh
+uv run python paper/make_figures.py --list                  # the whole dependency table
+uv run python paper/make_figures.py --run draw              # every redraw here, ~1 min
+uv run python paper/make_figures.py --run unmodelled_figure # one of them
+uv run python paper/make_figures.py --check                 # is anything stale?
+```
+
+`save()` records each figure in `paper/figures/MANIFEST.json` together with the
+SHA-256 of every `.npz` it read, so `--check` catches the case that matters here: a
+chain re-sampled after the figure drawn from it, which otherwise leaves a stale PDF
+in the paper with nothing to show for it. See `paper/validation/README.md` for what
+a manifest entry holds.
+
+Two reproducibility details specific to this directory:
+
+- **`run_convergence.py` runs on the CPU** (`JAX_PLATFORMS=cpu`, overridable). GPU
+  reductions are not bit-reproducible, and the Newton check was moving `one_vs_conv`
+  by 6e-6 between runs — irrelevant to the two decimals the table quotes, but it
+  rewrote `convergence.npz` every time and so invalidated the recorded provenance of
+  `fig_wdm_tdi`. On the CPU the file is bit-identical run to run, agrees with the GPU
+  to five significant figures, and the script is *faster* (20 s, no compilation).
+
+- **The seed bases the P--P runs share** live in `fd_pipeline.py` as `SEED_TRUTH` and
+  `SEED_NOISE`. `../pp/run_ppplot.py` and `../pp/run_decimation.py` must analyse the
+  same realisations for their comparison to mean anything, and a matched pair of
+  literals in two files is not a guarantee of that.

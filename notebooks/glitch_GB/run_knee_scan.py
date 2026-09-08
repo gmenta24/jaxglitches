@@ -611,7 +611,7 @@ def figure(out="fig_knee_scan"):
         ax.grid(alpha=0.3, which="both", lw=0.3)
         ax.tick_params(labelsize=6)
         ax.xaxis.label.set_size(7); ax.yaxis.label.set_size(7)
-    save(fig, out)
+    save(fig, out, inputs=[OUT, os.path.join(HERE, "knee_mcmc.npz")])
     plt.close(fig)
 
 

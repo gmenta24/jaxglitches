@@ -71,7 +71,9 @@ ax.set_ylabel(r"$(\theta^{(2)}-\theta^{(1)})\,/\,\sigma$")
 ax.legend(loc="lower left", fontsize=5.5)
 ax.set_title("(b) over independent noise draws", loc="left")
 
-save(fig, "fig_wdm_tdi")
+save(fig, "fig_wdm_tdi",
+     inputs=[HERE / "wdm_tdi2.npz", HERE / "wdm_chain.npz",
+             HERE / "convergence.npz"])
 print("\nsummary:")
 for i, lab in enumerate(T["labels"]):
     print(f"  {str(lab):10s} clean {T['clean_shift'][i]:+9.1e}   "

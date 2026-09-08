@@ -151,7 +151,7 @@ def main():
                handlelength=2.2, columnspacing=1.6, frameon=False,
                bbox_to_anchor=(0.5, 0.012))
 
-    save(fig, "fig_unmodelled")
+    save(fig, "fig_unmodelled", inputs=[HERE / "unmodelled.npz"])
     plt.close(fig)
 
 

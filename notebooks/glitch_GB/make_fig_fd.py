@@ -196,7 +196,7 @@ def make_corner(Z, out="fig_corner"):
     cb.ax.tick_params(labelsize=6, length=2)
 
     print(f"largest cross-block |rho| = {xmax:.4f}")
-    save(fig, out)
+    save(fig, out, inputs=[os.path.join(HERE, "fd_chains.npz")])
     plt.close(fig)
     return xmax
 
@@ -256,7 +256,8 @@ def make_residual(out="fig_residual"):
     ax.grid(alpha=0.3, which="both", lw=0.3)
     for gen in (1, 2):
         print(f"TDI-{gen}: mean whitened residual power = {curves[gen].mean():.4f}")
-    save(fig, out)
+    save(fig, out, inputs=[os.path.join(HERE, "dataset.npz"),
+                           os.path.join(HERE, "fd_chains.npz")])
     plt.close(fig)
 
 

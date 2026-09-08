@@ -106,7 +106,7 @@ def worker(job) -> dict:
     log_prior = fp.make_log_prior(co, bounds)
 
     # ---- same truth as run_ppplot.py realisation `idx` ----
-    rng = np.random.default_rng(10_000 + idx)
+    rng = np.random.default_rng(fp.SEED_TRUTH + idx)
     while True:
         th = jnp.asarray(rng.uniform(lo, hi))
         if np.isfinite(float(log_prior(th))):
@@ -116,7 +116,7 @@ def worker(job) -> dict:
     # ---- same data as run_ppplot.py realisation `idx` ----
     h_gb = fp.gb_fd_full(model, n_gb, gb8, grid["n_fine"])
     h_gl = fp.glitch_fd(g3, grid["freq"]).at[0].set(0 + 0j)
-    n_fd = ns.sample_noise_fd(jr.PRNGKey(500_000 + idx), psd)
+    n_fd = ns.sample_noise_fd(jr.PRNGKey(fp.SEED_NOISE + idx), psd)
     data = h_gb + h_gl + n_fd
 
     log_lik, dmeta = fp.build_decimated(grid, data, psd, K, model, n_gb, co)
@@ -161,6 +161,8 @@ def aggregate():
     import matplotlib.pyplot as plt
     sys.path.insert(0, os.path.join(REPO_ROOT, "paper", "validation"))
     from _style import COL_IN, FULL_IN, C, save
+    sys.path.insert(0, GLITCH_GB)
+    import fd_pipeline as fp          # for the seed bases, in the manifest
 
     disp = [r'$\log f_0$', r'$\log\dot f$', r'$\log\mathcal{A}$', r'$\psi$',
             r'$t_0$', r'$\log A_g$', r'$\log\tau$']
@@ -292,8 +294,6 @@ def aggregate():
     ax.set_title("(b) offset of the maximum", loc="left")
     ax.legend(fontsize=5.5, loc="lower right", ncol=2, columnspacing=0.8)
     ax.grid(alpha=0.3, which="both", lw=0.3)
-    save(fig, "fig_decimation")
-
     np.savez_compressed(SUMMARY,
                         **{f"K{K}_q": d["q"] for K, d in data.items()},
                         **{f"K{K}_z": d["z"] for K, d in data.items()},
@@ -305,6 +305,12 @@ def aggregate():
                         prior_dominated=np.array([pd[K] for K in data]),
                         tail_fraction=np.array([tail[K] for K in sets]))
     print(f"\nwrote {SUMMARY}")
+
+    # after the summary, so that `save` can hash it: `decimation_summary.npz` is
+    # the single artefact standing in for the whole `decruns/` directory.
+    save(fig, "fig_decimation", inputs=[SUMMARY],
+         seed={"truth": f"{fp.SEED_TRUTH} + idx", "noise": f"{fp.SEED_NOISE} + idx"},
+         note=f"strides K = {sorted(data)}")
 
 
 if __name__ == "__main__":

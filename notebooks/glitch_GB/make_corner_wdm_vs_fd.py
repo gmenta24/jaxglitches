@@ -102,7 +102,7 @@ handles += [plt.Line2D([0], [0], color=C['grey'], lw=1.0, ls='--',
 fig.legend(handles=handles, fontsize=7, loc='upper right',
            bbox_to_anchor=(0.99, 0.98), frameon=False)
 fig.supxlabel(r'$(\theta-\theta_{\rm true})\,/\,\sigma_{\rm FD}$  (chain width)', fontsize=8)
-save(fig, 'fig_wdm_corner')
+save(fig, 'fig_wdm_corner', inputs=[os.path.join(HERE, 'wdm_chain.npz')])
 
 # ── the numbers the figure is making ────────────────────────────────────────
 print(f'\n{"parameter":11s}{"sigma FD chain":>16s}{"WDM/FD":>9s}{"Fisher/FD":>11s}')

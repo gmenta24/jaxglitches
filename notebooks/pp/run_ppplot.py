@@ -89,7 +89,7 @@ def worker(idx: int) -> dict:
     log_prior = fp.make_log_prior(co, bounds)
 
     # ---- draw truth from the prior, rejecting the Deltav-support cut ----
-    rng = np.random.default_rng(10_000 + idx)
+    rng = np.random.default_rng(fp.SEED_TRUTH + idx)
     while True:
         th = jnp.asarray(rng.uniform(lo, hi))
         if np.isfinite(float(log_prior(th))):
@@ -99,7 +99,7 @@ def worker(idx: int) -> dict:
     # ---- data: signals + a fresh noise draw ----
     h_gb = fp.gb_fd_full(model, n_gb, gb8, grid["n_fine"])
     h_gl = fp.glitch_fd(g3, grid["freq"]).at[0].set(0 + 0j)
-    n_fd = ns.sample_noise_fd(jr.PRNGKey(500_000 + idx), psd)
+    n_fd = ns.sample_noise_fd(jr.PRNGKey(fp.SEED_NOISE + idx), psd)
     data = h_gb + h_gl + n_fd
     import jaxglitches as jg
     snr_gb, snr_gl = float(jg.snr(h_gb, psd)), float(jg.snr(h_gl, psd))
@@ -160,6 +160,8 @@ def aggregate():
     from scipy import stats
     sys.path.insert(0, os.path.join(REPO_ROOT, "paper", "validation"))
     from _style import COL_IN, C, save
+    sys.path.insert(0, GLITCH_GB)
+    import fd_pipeline as fp          # for the seed bases, in the manifest
 
     runs = sorted(d for d in os.listdir(RUNDIR) if d.startswith("run_"))
     Q, snr = [], []
@@ -200,9 +202,14 @@ def aggregate():
     ax.set_xlabel("credible interval"); ax.set_ylabel("fraction of injections")
     ax.set_title(f"$N={n}$, combined $p={comb:.2f}$", fontsize=8, loc="left")
     ax.legend(fontsize=6, loc="upper left", ncol=2)
-    save(fig, "fig_pp")
-    np.savez_compressed(os.path.join(HERE, "pp_summary.npz"), quantiles=Q, snr=snr,
+    # written before the figure so that `save` can hash it: `pp_summary.npz` is the
+    # single artefact standing in for the whole `ppruns/` directory.
+    summary = os.path.join(HERE, "pp_summary.npz")
+    np.savez_compressed(summary, quantiles=Q, snr=snr,
                         names=np.array(names), pvalues=np.array(ps))
+    save(fig, "fig_pp", inputs=[summary],
+         seed={"truth": f"{fp.SEED_TRUTH} + idx", "noise": f"{fp.SEED_NOISE} + idx"},
+         note=f"{n} realisations")
 
 
 if __name__ == "__main__":

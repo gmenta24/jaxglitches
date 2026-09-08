@@ -18,14 +18,25 @@ sharp as the sampler allows.
 
 Reads the stored chains -- `fd_chains.npz`, `wdm_chain.npz`, `wdm_tdi2.npz`,
 `gb_free_sky.npz` -- so nothing is re-sampled. Writes `convergence.npz` next to this
-script and `paper/figures/tab_convergence.tex`. Runtime a couple of minutes, almost all
-of it the Newton check, which has to build the likelihoods.
+script and `paper/figures/tab_convergence.tex`. Runtime about 20 s, almost all of it the
+Newton check, which has to build the likelihoods; it runs on the CPU deliberately, see
+below.
 """
 import os
 import sys
 from pathlib import Path
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+
+# Run the Newton check on the CPU. It is a 7x7 solve and one Hessian of the hybrid
+# likelihood -- seconds either way -- but GPU reductions are not bit-reproducible,
+# and two runs of this script were producing `convergence.npz` files that differed
+# in `one_vs_conv` at 6e-6. That is far below the two decimals the paper quotes, so
+# nothing in the table moved; it did mean the file changed on every run, and with it
+# the recorded provenance of every figure drawn from it. On the CPU the whole file
+# comes out bit-identical run to run, and agrees with the GPU to five significant
+# figures. Set JAX_PLATFORMS=gpu to override.
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))                  # fd_pipeline.py
@@ -243,8 +254,17 @@ def newton_check():
 
 # ---------------------------------------------------------------------------
 
-def latex_table(rows, path):
-    """Emit the convergence table the paper \\input{}s."""
+def latex_table(rows, inputs=()):
+    """Emit the convergence table the paper \\input{}s, through _style.save_text.
+
+    Routing it through `save_text` rather than `write_text` puts it in
+    `paper/figures/MANIFEST.json` alongside the figures, with the SHA-256 of every
+    chain it summarises -- the table is a claim about those files, so it is only
+    reproducible together with them.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "paper" / "validation"))
+    from _style import save_text
     head = (r"\begin{tabular}{lrrrrr}" "\n" r"\hline\hline" "\n"
             r"chain & walkers $\times$ iters & acc. & $\tau_{\rm int}$ & "
             r"$N_{\rm eff}$ & $\max\hat R$ \\" "\n" r"\hline" "\n")
@@ -257,8 +277,7 @@ def latex_table(rows, path):
                  + f" & ${d['ess'].min():.0f}$--${d['ess'].max():.0f}$"
                  + f" & ${d['rhat'].max():.4f}$ \\\\\n")
     tail = r"\hline\hline" "\n" r"\end{tabular}" "\n"
-    path.write_text(head + body + tail)
-    print(f"\nwrote {path}")
+    return save_text(head + body + tail, "tab_convergence.tex", inputs=inputs)
 
 
 def main():
@@ -323,7 +342,9 @@ def main():
     for k, v in nulls.items():
         out["null_" + k.split(",")[0].replace(" ", "_").replace("-", "")] = v
     np.savez_compressed(HERE / "convergence.npz", **out)
-    latex_table(rows, REPO / "paper" / "figures" / "tab_convergence.tex")
+    latex_table(rows, inputs=[HERE / n for n in
+                             ("fd_chains.npz", "wdm_chain.npz", "wdm_tdi2.npz",
+                              "gb_free_sky.npz", "unmodelled.npz")])
     print(f"saved {HERE / 'convergence.npz'}")
 
 
