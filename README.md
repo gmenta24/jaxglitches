@@ -96,11 +96,20 @@ uv run pytest
 `notebooks/glitch_only/unequal_vs_equal_arm.ipynb` goes one step further and asks
 what the equal-arm approximation *costs*: it injects with the six frozen delays of a
 Keplerian constellation, fits with the equal-arm template, and measures the resulting
-bias over a year of epochs. Appendix B of the paper reports the answer. Two findings
+bias over a year of epochs. Appendix D of the paper reports the answer. Two findings
 are worth knowing before reusing that code — the T channel stops being null once the
 arms are unequal, so the equal-arm `S_T` of `notebooks/noise.py` must not be used with
 an unequal-arm signal; and the equal-arm `T` an analyst picks matters, the epoch's mean
 delay being a factor four better than the design value.
+
+`notebooks/glitch_only/compare_other_codes.ipynb` checks the package against
+published results rather than against itself: the optimal SNRs of the seven glitches
+tabulated by Muratore et al. (2025), the LISA Pathfinder population projected to LISA
+by Baghi et al. (2022), the two-year population percentiles of Boumerdassi et al.
+(2026), and the parameter degeneracy Sauter et al. (2025) report for sub-sample
+glitches. Appendix C of the paper reports what came out. Two of the four agree
+sharply; the other two turn on what a published amplitude column means, and the
+notebook says so rather than picking the flattering reading.
 
 The waveforms are also checked end to end against the external LISA simulation
 chain — a glitch injected with `lisaglitch`, propagated by `lisainstrument` and
@@ -169,7 +178,7 @@ Three properties make this reproducible rather than merely scripted:
    per figure: its SHA-256, the producer that wrote it, the seeds it used, the
    SHA-256 of every data file it read, the git commit, and the versions of `jax`,
    `jaxglitches`, `lisaglitch`, `lisainstrument`, `pytdi` and the rest, plus the JAX
-   backend — which matters, because Sec. 3.4 of the paper quotes residuals at
+   backend — which matters, because Appendix B.4 of the paper quotes residuals at
    `1e-16`, where CPU and GPU differ. The commit it records is this repository's;
    the paper tree and the chains are outside it, which is precisely why their
    hashes are worth writing down.
@@ -179,11 +188,14 @@ Three properties make this reproducible rather than merely scripted:
    `.npz` inputs are hashed member by member, so a rewritten-but-identical chain does
    not raise a false alarm.
 
-Verified by running every producer outside the `sample` tier twice from scratch: 21
-of the 22 outputs come back byte-identical. The exception is `tab_benchmark.tex`,
-whose content is wall-clock timings and which is flagged `reproducible: false` in the
-manifest. Three producers had to give up the GPU to get there
-(`05_heterodyne.ipynb`, `unequal_vs_equal_arm.ipynb`, `run_convergence.py`): GPU
+Verified by running every producer outside the `sample` tier twice from scratch:
+every output comes back byte-identical except the two benchmark outputs,
+`fig_benchmark.pdf` and `tab_benchmark.tex`, whose content is wall-clock timings and
+which are flagged `reproducible: false` in the manifest. (`fig_wdm_tiling.pdf` comes
+from a 40-minute sampler notebook and is registered in the manifest rather than
+re-run.) Four producers had to give up the GPU to get there
+(`05_heterodyne.ipynb`, `unequal_vs_equal_arm.ipynb`, `compare_other_codes.ipynb`,
+`run_convergence.py`): GPU
 reductions are not bit-reproducible, and each was rewriting its figure on every run
 at a relative `1e-6` that changed nothing it reports. They set `JAX_PLATFORMS=cpu`,
 overridable, and each says why at the top of the file. The MCMC in the `sample` tier

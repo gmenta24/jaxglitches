@@ -49,3 +49,6 @@ epochs_*.h5
 
 # paper draft (kept out of the package repo)
 paper/
+
+# presentation draft (kept out of the package repo)
+presentation/
