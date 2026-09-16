@@ -257,6 +257,38 @@ def build_hybrid(grid, data_fd, psd, k_ref, model, n_gb, coords,
                          df_max=df_max, t_ref=float(t_ref), tdi=tdi)
 
 
+def build_full(grid, data_fd, psd, model, n_gb, coords, tdi=1):
+    """The exact fine-grid likelihood: every bin, no blocks, no stride.
+
+        log L(theta) = -sum_{c} sum_{k>0} |d_k - h^GB_k - h^g_k|^2 / S_k
+
+    This is the reference `build_hybrid` is an identity for, and the one thing the
+    hybrid cannot be checked against by algebra alone: the block approximation
+    h_k ~ h(fbar_b) has to be measured. Three copies of this likelihood were written
+    inline -- in `run_unmodelled.build_fd`, in `run_knee_scan._exact_loglik` (curvature
+    only) and in `paper/validation/05_heterodyne.ipynb` -- before it was worth hoisting
+    here; those predate this function and are left alone.
+
+    The Galactic binary is scattered into a full-length zero array rather than kept as
+    a segment, which is the O(n_fine) cost this exists to pay. The DC bin is excluded,
+    as everywhere else.
+    """
+    freq, n_fine = grid["freq"], grid["n_fine"]
+    d, P = data_fd[1:], psd[1:]
+    if tdi not in (1, 2):
+        raise ValueError(f"tdi must be 1 or 2, got {tdi!r}")
+    g2 = gen2(freq)[:, None] if tdi == 2 else 1.0
+
+    @jax.jit
+    def log_lik(th):
+        gb8, g3 = coords.to_physical(th)
+        h = (gb_fd_full(model, n_gb, gb8, n_fine) + glitch_fd(g3, freq)) * g2
+        r = d - h[1:]
+        return -jnp.sum((r.real ** 2 + r.imag ** 2) / P)
+
+    return log_lik, dict(n_fine=n_fine, n_evals=n_fine, tdi=tdi)
+
+
 def build_decimated(grid, data_fd, psd, K, model, n_gb, coords, tdi=1, k_first=1):
     """The tempting cheap alternative to binning: keep every K-th bin, scale by K.
 

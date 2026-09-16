@@ -111,6 +111,15 @@ glitches. Appendix C of the paper reports what came out. Two of the four agree
 sharply; the other two turn on what a published amplitude column means, and the
 notebook says so rather than picking the flattering reading.
 
+`notebooks/glitch_only/exact_vs_hybrid.ipynb` asks whether the binned likelihood the
+paper samples from gives the same posterior as the exact one over all 93,697 Fourier
+bins. Same stored data, same priors, same sampler, same Newton start — the only thing
+that changes is the grid. The awkward part is knowing what agreement to demand, since
+two chains of any finite length disagree, so the notebook measures that too: one of its
+five chains is a second hybrid run differing only in its random seed, and that control is
+the yardstick. The binning comes out smaller than it, on both the posterior widths and
+the medians. Section 3.7 of the paper reports the numbers.
+
 The waveforms are also checked end to end against the external LISA simulation
 chain — a glitch injected with `lisaglitch`, propagated by `lisainstrument` and
 combined into Michelson TDI by `pytdi` — in
@@ -193,9 +202,9 @@ every output comes back byte-identical except the two benchmark outputs,
 `fig_benchmark.pdf` and `tab_benchmark.tex`, whose content is wall-clock timings and
 which are flagged `reproducible: false` in the manifest. (`fig_wdm_tiling.pdf` comes
 from a 40-minute sampler notebook and is registered in the manifest rather than
-re-run.) Four producers had to give up the GPU to get there
+re-run.) Five producers had to give up the GPU to get there
 (`05_heterodyne.ipynb`, `unequal_vs_equal_arm.ipynb`, `compare_other_codes.ipynb`,
-`run_convergence.py`): GPU
+`exact_vs_hybrid.ipynb`, `run_convergence.py`): GPU
 reductions are not bit-reproducible, and each was rewriting its figure on every run
 at a relative `1e-6` that changed nothing it reports. They set `JAX_PLATFORMS=cpu`,
 overridable, and each says why at the top of the file. The MCMC in the `sample` tier

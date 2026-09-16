@@ -61,7 +61,9 @@ jax.config.update("jax_enable_x64", True)
 # resamples the empirical LPF catalogue rather than this log-uniform box.
 _T0_MIN   = 0.0      # onset time lower bound (s)
 _DELTAV_MIN = 1e-16   # minimum velocity kick (m/s)  — practical detection floor
-_DELTAV_MAX = 1e-7    # maximum velocity kick (m/s)  — above brightest LPF event (~2e-8)
+_DELTAV_MAX = 1e-7    # maximum velocity kick (m/s)  — above the brightest LPF row (~2e-8;
+                      # that row's amplitude contradicts its own tabulated SNR, and the
+                      # loudest self-consistent event is ~2.7e-11, so this is generous)
 _TAU_MIN   = 0.1     # minimum decay timescale (s)  — LPF sampler support (~sample rate)
 _TAU_MAX   = 5e4     # maximum decay timescale (s)  — LPF sampler support (longest events)
 
