@@ -1,5 +1,6 @@
-"""TDI-1 against TDI-2 in the WDM domain: the null test of Sec. 5.5, repeated
-in the time--frequency analysis.
+"""TDI-1 against TDI-2 in the WDM domain: the null test of Sec. "TDI-1 against TDI-2: a
+null test", repeated in the time--frequency analysis (Sec. "TDI-1 against TDI-2, in the
+time--frequency domain").
 
 In the frequency domain the two generations are related by an exact identity ---
 h^(2) = -TF_X^(1) h^(1) and S^(2) = |TF_X^(1)|^2 S^(1), so the transfer function
@@ -7,27 +8,41 @@ cancels bin by bin and the two likelihoods are equal to machine precision. Any
 disagreement there is a bug.
 
 The time--frequency analysis is different, and that is what makes the test worth
-repeating rather than copying. The split likelihood keeps 1106 pixels out of the
-187394 real numbers of the fine grid, and the per-pixel variance of Eq. (35) is
-evaluated at the channel centre. The generation transfer function varies across a
-channel, so the two generations do not weight the plane identically and do not
-discard the same part of the same noise realisation. The comparison therefore
-measures the size of that effect instead of testing an identity, and this script
-separates the two things that can produce a difference:
+repeating rather than copying. Between the generations every Fourier component is
+multiplied by -TF_X1(f) = 2 sin(4 pi f L) * i * exp(-4 pi i f L): a magnitude, a
+quarter-cycle phase and a delay of 2L. A WDM pixel is a weighted sum over its channel,
+and the quarter-cycle swaps each wavelet for its quadrature partner, which the basis
+(one phase per pixel) carries mostly in the neighbouring time bins. The binary's window
+keeps every time bin of its channels and cannot tell; the glitch's window keeps four,
+so content crosses its edges and each generation keeps a different part of the same
+noise realisation. The obvious suspect -- the magnitude varying across a channel while
+the pixel variance of Eq. (wdmvar) takes it at the channel centre -- turns out to be
+negligible. The comparison therefore measures the size of an effect instead of testing
+an identity, and this script separates the things that can produce a difference:
 
   * the machinery -- templates, transform, windows, split -- which is checked on
-    noise-free data, where the two generations must agree to round-off;
+    noise-free data, where the two generations must agree to round-off (`checks`);
   * the noise, which is checked by repeating the comparison over independent
-    realisations and by running a full TDI-2 chain against the stored TDI-1 one.
+    realisations (`scatter`) and by running a full TDI-2 chain against the stored
+    TDI-1 one (`chain`);
+  * the mechanism, which applies the magnitude, the phase, the quarter-cycle and the
+    delay one at a time to noise draws, and then lengthens the glitch window in time
+    (`mechanism`). It is linear and noise-only: no likelihood, no sampler, a few
+    minutes on a CPU.
 
 Writes `wdm_tdi2.npz` next to this script; `make_fig_wdm_tdi.py` turns that into
 `paper/figures/fig_wdm_tdi.pdf`. Runtime is dominated by the chain, about half an hour
-on a GPU, with the realisation scan adding roughly as much again.
+on a GPU, with the realisation scan adding roughly as much again. `mechanism` writes
+its own `wdm_tdi2_mechanism.npz` and is not merged, so re-running it leaves the
+figure's recorded inputs untouched.
 
-The three phases run as separate processes:
+The phases run as separate processes:
 
-    python run_wdm_tdi2.py            # checks, scatter, chain, then merge
-    python run_wdm_tdi2.py chain      # one phase only
+    python run_wdm_tdi2.py              # checks, scatter, chain, then merge
+    python run_wdm_tdi2.py chain        # one phase only
+    python run_wdm_tdi2.py mechanism    # which piece of the transfer function matters
+    python run_wdm_tdi2.py report       # print the numbers the paper quotes, from the
+                                        # stored files
 
 That is not cosmetic. Each realisation builds its own jitted likelihood closure holding
 about 20 MB of device arrays, and with a few dozen of them alive the XLA compilation of
@@ -63,6 +78,7 @@ from jaxglitches.priors import _DELTAV_MIN, _DELTAV_MAX, _TAU_MIN, _TAU_MAX
 BACKEND = get_backend("jax")
 N_REALISATIONS = 48
 SEED_CHAIN = 1            # the seed the stored TDI-1 chain used: common random numbers
+SEED_MECHANISM = 5000     # noise draws of `mechanism`, disjoint from those of `scatter`
 N_WALKERS, N_BURN, N_SAMP, DIM = 16, 2_000, 10_000, 7
 LABELS = ["log_f0", "log_fdot", "log_A_gb", "psi", "t0", "log_Ag", "log_tau"]
 
@@ -220,6 +236,8 @@ def run_chain(log_lik, x0, cov, seed):
 
 
 PHASES = ("checks", "scatter", "chain")
+# Run on request only, and never merged into wdm_tdi2.npz, which the figure reads.
+EXTRA_PHASES = ("mechanism",)
 
 
 def _out(phase):
@@ -315,6 +333,194 @@ def phase_chain():
     return out
 
 
+def _pieces():
+    """The generation transfer function taken apart.
+
+    -TF_X1(f) = 1 - exp(-8 pi i f L) = 2 sin(4 pi f L) * i * exp(-4 pi i f L). Each entry
+    maps to (the factor applied to every Fourier component, the generation whose
+    channel-centre PSD sets the pixel variance): a piece that changes the magnitude
+    changes the variance with it, a pure phase does not.
+    """
+    F = np.asarray(-TFX1)
+    return {"full":          (F, 2),
+            "magnitude":     (np.abs(F), 2),
+            "phase":         (F / np.abs(F), 1),
+            "quarter_cycle": (np.full(F.shape, 1j), 1),
+            "delay":         (np.exp(-4j * np.pi * np.asarray(f_safe) * T_ARM), 1)}
+
+
+# Glitch windows of growing length, as (label, bins before bin 0, bins after bin 3).
+# `None` keeps every time bin of the year.
+MECH_WINDOWS = (("bins 0-3 (the paper's)", 0, 0),
+                ("+ wrapped bins 1462-1463", 2, 0),
+                ("2 more either side", 2, 2),
+                ("4 more either side", 4, 4),
+                ("8 more either side", 8, 8),
+                ("all time bins", None, None))
+
+
+def phase_mechanism():
+    """Which part of the transfer function makes the glitch window generation-dependent?
+
+    The yardstick is the quantity that drives the glitch amplitude estimate: the noise's
+    matched-filter projection onto the glitch template inside W_gl, (n|h)/rho. For TDI-1
+    and for each piece of the transfer function it is computed on the same noise draws,
+    and the two are compared by their correlation and by the spread of their difference.
+    A piece that does nothing gives correlation 1. The pixel-by-pixel correlation of the
+    whitened noise is recorded as well, in both windows.
+
+    The second half keeps the full transfer function and lengthens W_gl in time, bins
+    added on either side of the onset and wrapping round the end of the year. If the
+    difference comes from content crossing the window's time edges, it must shrink as
+    the window grows, and it does.
+    """
+    psd_bin = ns.psd_tdi1_array(f_safe, t_obs=T_OBS)
+    h1 = np.asarray(DS["h_glitch_tdi1"])
+    rho_fd = float(jg.snr(jnp.asarray(h1), psd_bin))
+    pieces = _pieces()
+    names = list(pieces)
+    gl_t, gl_ch, gb_ch = np.asarray(GL_T), np.asarray(GL_CH), np.asarray(GB_CH)
+
+    def coeffs(H, nt):
+        return np.asarray(wdm_of(to_time(jnp.asarray(H)), nt).coeffs)
+
+    def win_gl(A):
+        return A[:, gl_t][:, :, gl_ch]
+
+    def win_gb(A):
+        return A[:, :, gb_ch]
+
+    var = {(g, k): np.asarray(VAR[(g, k)]) for g in (1, 2) for k in ("gl", "gb")}
+    full_t = {1: coeffs(h1, NT_GL), 2: coeffs(pieces["full"][0][:, None] * h1, NT_GL)}
+    tmpl = {"tdi1": win_gl(full_t[1])}
+    vgl, vgb = {"tdi1": win_gl(var[(1, "gl")])}, {"tdi1": win_gb(var[(1, "gb")])}
+    for name, (fac, gen) in pieces.items():
+        tmpl[name] = win_gl(coeffs(fac[:, None] * h1, NT_GL))
+        vgl[name], vgb[name] = win_gl(var[(gen, "gl")]), win_gb(var[(gen, "gb")])
+    rho = {k: float(np.sqrt(np.sum(tmpl[k] ** 2 / vgl[k]))) for k in tmpl}
+
+    bins = []
+    for _, before, after in MECH_WINDOWS:
+        bins.append(np.arange(NT_GL) if before is None else
+                    np.r_[np.arange(NT_GL - before, NT_GL), np.arange(0, NT_WIN + after)]
+                    .astype(int))
+
+    def sel(A, b):
+        return A[:, b][:, :, gl_ch]
+
+    wrho = np.array([[np.sqrt(np.sum(sel(full_t[g], b) ** 2 / sel(var[(g, "gl")], b)))
+                      for g in (1, 2)] for b in bins])
+
+    n = N_REALISATIONS
+    proj1 = np.zeros(n)
+    proj = np.zeros((len(names), n))
+    pix = np.zeros((len(names), n, 2))              # [W_gl, W_GB]
+    wproj = np.zeros((len(bins), n, 2))             # [TDI-1, full factor]
+    print(f"== {n} noise draws, each through TDI-1 and {len(names)} pieces of the "
+          f"transfer function ==", flush=True)
+    for s in range(n):
+        nz = np.array(ns.sample_noise_fd(jr.split(jr.PRNGKey(SEED_MECHANISM + s))[0],
+                                         psd_bin))
+        nz[0] = 0.0
+        c1_gl, c1_gb = coeffs(nz, NT_GL), coeffs(nz, NT_GB)
+        z1_gl = (win_gl(c1_gl) / np.sqrt(vgl["tdi1"])).ravel()
+        z1_gb = (win_gb(c1_gb) / np.sqrt(vgb["tdi1"])).ravel()
+        proj1[s] = np.sum(win_gl(c1_gl) * tmpl["tdi1"] / vgl["tdi1"]) / rho["tdi1"]
+        for i, (name, (fac, gen)) in enumerate(pieces.items()):
+            nv = fac[:, None] * nz
+            cv_gl, cv_gb = coeffs(nv, NT_GL), coeffs(nv, NT_GB)
+            proj[i, s] = np.sum(win_gl(cv_gl) * tmpl[name] / vgl[name]) / rho[name]
+            pix[i, s] = (np.corrcoef(z1_gl, (win_gl(cv_gl) / np.sqrt(vgl[name])).ravel())[0, 1],
+                         np.corrcoef(z1_gb, (win_gb(cv_gb) / np.sqrt(vgb[name])).ravel())[0, 1])
+            if name == "full":
+                for j, b in enumerate(bins):
+                    for g, c in ((1, c1_gl), (2, cv_gl)):
+                        wproj[j, s, g - 1] = (np.sum(sel(c, b) * sel(full_t[g], b)
+                                                     / sel(var[(g, "gl")], b)) / wrho[j, g - 1])
+        if (s + 1) % 12 == 0:
+            print(f"  {s + 1}/{n}", flush=True)
+
+    corr = np.array([np.corrcoef(proj1, p)[0, 1] for p in proj])
+    spread = np.array([np.std(p - proj1) for p in proj])
+    print(f"\nnoise projection onto the glitch template in W_gl, TDI-1 against each piece")
+    print(f"  (the window keeps SNR {rho['tdi1']:.2f} of {rho_fd:.2f} in TDI-1)")
+    print(f"  {'piece':15s}{'window SNR':>11s}{'corr':>8s}{'std diff':>10s}"
+          f"{'pixel corr W_gl':>17s}{'W_GB':>8s}")
+    for i, name in enumerate(names):
+        print(f"  {name:15s}{rho[name]:11.2f}{corr[i]:8.3f}{spread[i]:10.3f}"
+              f"{pix[i, :, 0].mean():17.3f}{pix[i, :, 1].mean():8.3f}")
+    wcorr = np.array([np.corrcoef(w[:, 0], w[:, 1])[0, 1] for w in wproj])
+    wspread = np.array([np.std(w[:, 1] - w[:, 0]) for w in wproj])
+    print(f"\nthe same, full transfer function, glitch window lengthened in time")
+    print(f"  {'window':26s}{'SNR kept TDI-1':>15s}{'TDI-2':>7s}{'corr':>8s}{'std diff':>10s}")
+    for j, (label, _, _) in enumerate(MECH_WINDOWS):
+        print(f"  {label:26s}{wrho[j, 0] / rho_fd:15.3f}{wrho[j, 1] / rho_fd:7.3f}"
+              f"{wcorr[j]:8.3f}{wspread[j]:10.3f}")
+    return dict(pieces=np.array(names), rho_fd=rho_fd, rho_tdi1=rho["tdi1"],
+                rho_pieces=np.array([rho[k] for k in names]),
+                proj_tdi1=proj1, proj=proj, pixel_corr=pix, corr=corr, spread=spread,
+                windows=np.array([w[0] for w in MECH_WINDOWS]), window_rho=wrho,
+                window_proj=wproj, window_corr=wcorr, window_spread=wspread)
+
+
+def report():
+    """Print the numbers the paper quotes, read off the stored files.
+
+    Nothing is computed that the stored chains and Laplace comparisons do not already
+    contain; this only gathers the statistics Sec. "TDI-1 against TDI-2, in the
+    time--frequency domain" and the red To-do quote, so that each has a place it comes
+    from.
+    """
+    W = np.load(HERE / "wdm_chain.npz")
+    T = np.load(HERE / "wdm_tdi2.npz")
+    truth = W["theta_true"]
+    print("posterior medians against the injection, in units of each chain's own width")
+    print(f"  {'':12s}" + "".join(f"{lab:>10s}" for lab in LABELS))
+    for name, ch in (("exact FD", W["chain_fd"]), ("WDM TDI-1", W["chain"]),
+                     ("WDM TDI-2", T["chain2"])):
+        z = (np.median(ch, axis=0) - truth) / ch.std(axis=0)
+        print(f"  {name:12s}" + "".join(f"{v:+10.2f}" for v in z))
+
+    print("\nnoise-free data:")
+    print(f"  max |MAP2 - MAP1| / sigma     = {np.abs(T['clean_shift']).max():.2e}")
+    print(f"  max |sigma ratio - 1|         = {np.abs(T['clean_ratio'] - 1).max():.2e}")
+    print("stored realisation, (TDI-2 - TDI-1) / sigma:")
+    print(f"  {'':12s}" + "".join(f"{lab:>10s}" for lab in LABELS))
+    print(f"  {'Laplace':12s}" + "".join(f"{v:+10.3f}" for v in T["laplace_shift"]))
+    print(f"  {'chains':12s}" + "".join(f"{v:+10.3f}" for v in T["med_shift"]))
+    print(f"  Laplace and chains agree to {np.abs(T['laplace_shift'] - T['med_shift'])[4:].max():.3f}"
+          f" sigma in the glitch block")
+    print(f"  width ratio: Laplace {T['laplace_ratio'].min():.3f}-{T['laplace_ratio'].max():.3f},"
+          f" chains {T['sig_ratio'].min():.3f}-{T['sig_ratio'].max():.3f}")
+
+    S = T["scatter"]
+    n = S.shape[0]
+    sd = S.std(axis=0)
+    print(f"\n{n} noise draws, Laplace (TDI-2 - TDI-1) / sigma:")
+    print(f"  binary block: spread {sd[:4].max():.3f}, worst |shift| {np.abs(S[:, :4]).max():.3f}")
+    print(f"  glitch block: spread " + " ".join(f"{v:.3f}" for v in sd[4:])
+          + ", mean " + " ".join(f"{v:+.3f}" for v in S[:, 4:].mean(axis=0))
+          + ", mean/s.e. " + " ".join(f"{v:+.2f}" for v in S[:, 4:].mean(axis=0) / (sd[4:] / np.sqrt(n))))
+    print(f"  draws exceeding 1 sigma in at least one glitch parameter: "
+          f"{int((np.abs(S[:, 4:]) > 1.0).any(axis=1).sum())} of {n}")
+    print(f"  the stored realisation, in units of that spread: "
+          + " ".join(f"{v:+.2f}" for v in T["laplace_shift"][4:] / sd[4:]))
+
+    path = _out("mechanism")
+    if not path.exists():
+        print(f"\n({path.name} not found: run `{Path(__file__).name} mechanism` for the rest)")
+        return
+    M = np.load(path)
+    print(f"\nmechanism ({M['proj'].shape[1]} draws): TDI-1 against each piece, noise "
+          f"projection onto the glitch template in W_gl")
+    for i, name in enumerate(M["pieces"]):
+        print(f"  {str(name):15s} corr {M['corr'][i]:.3f}   pixel corr W_gl "
+              f"{M['pixel_corr'][i, :, 0].mean():.3f}, W_GB {M['pixel_corr'][i, :, 1].mean():.3f}")
+    for j, label in enumerate(M["windows"]):
+        print(f"  {str(label):26s} SNR kept {M['window_rho'][j, 0] / M['rho_fd']:.3f}   "
+              f"corr {M['window_corr'][j]:.3f}")
+
+
 def merge():
     out = {"theta_true": np.asarray(THETA_TRUE), "labels": np.array(LABELS)}
     for phase in PHASES:
@@ -332,8 +538,11 @@ def main():
         if phase == "merge":
             merge()
             return
-        if phase not in PHASES:
-            raise SystemExit(f"phase must be one of {PHASES + ('merge',)}")
+        if phase == "report":
+            report()
+            return
+        if phase not in PHASES + EXTRA_PHASES:
+            raise SystemExit(f"phase must be one of {PHASES + EXTRA_PHASES + ('merge', 'report')}")
         np.savez_compressed(_out(phase), **globals()[f"phase_{phase}"]())
         print(f"saved {_out(phase)}")
         return

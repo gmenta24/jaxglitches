@@ -115,10 +115,19 @@ notebook says so rather than picking the flattering reading.
 paper samples from gives the same posterior as the exact one over all 93,697 Fourier
 bins. Same stored data, same priors, same sampler, same Newton start — the only thing
 that changes is the grid. The awkward part is knowing what agreement to demand, since
-two chains of any finite length disagree, so the notebook measures that too: one of its
-five chains is a second hybrid run differing only in its random seed, and that control is
-the yardstick. The binning comes out smaller than it, on both the posterior widths and
-the medians. Section 3.7 of the paper reports the numbers.
+two chains of any finite length disagree, so the notebook measures that too: in each TDI
+generation a second hybrid chain differs from the first only in its random seed, and that
+control is the yardstick. In root-mean-square over the seven parameters the binning comes
+out smaller than it, on both the posterior widths and the medians, in both generations.
+Appendix E of the paper reports the numbers, and Sec. 3.2 summarises them.
+
+`notebooks/glitch_only/short_glitch.py` asks what is left of a glitch too short for the
+analysis band to resolve, i.e. with its knee 1/(2 pi tau) above the 3 mHz top of the
+band (tau below 53 s). Below the knee the glitch is a velocity step at the pulse
+centroid t0 + 2 tau, so the kick and the centroid stay measured -- a chain at tau = 1 s
+gives Deltav to 2.5% (about 1/rho) and the centroid to 2 s -- while tau becomes an upper
+limit and t0 is lost in its degeneracy with tau. The Fisher matrix's constant 3.8% on
+Deltav at small tau is a linearisation artefact, which the chain shows.
 
 The waveforms are also checked end to end against the external LISA simulation
 chain — a glitch injected with `lisaglitch`, propagated by `lisainstrument` and

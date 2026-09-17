@@ -48,6 +48,8 @@ Phases
     python run_unmodelled.py scatter        # is the shift a bias or a draw? 24 draws
     python run_unmodelled.py chains         # the posteriors themselves, at 4 rho_crit
     python run_unmodelled.py figure         # paper/figures/fig_unmodelled.pdf
+    python run_unmodelled.py table          # print the numbers of the paper's summary
+                                            # table (tab:unmodelled) from unmodelled.npz
 
 Writes `unmodelled.npz` next to this script. About two hours on one GPU, the chains
 dominating.
@@ -758,6 +760,81 @@ def merge():
           f"/{len(PHASES)} phases)")
 
 
+def table():
+    """Print the numbers of the paper's Table `tab:unmodelled`, read off `unmodelled.npz`.
+
+    Nothing is recomputed. Displacements are of the four binary parameters, in units of
+    each analysis's own width: Laplace widths at the maximum for the ladder and the draws,
+    sampled widths for the chains. The two rows without a glitch in the data are rung 0
+    of the ladder, where only the four-parameter analyses were run.
+    """
+    U = dict(np.load(HERE / "unmodelled.npz", allow_pickle=True))
+    names = [str(a) for a in U["analyses"]]
+    j = {a: names.index(a) for a in names}
+    rungs = [float(r) for r in U["rungs"]]
+    r0, rh = rungs.index(0.0), rungs.index(HEADLINE)
+    rho_crit = float(U["rho_crit"])
+    head = "".join(f"{lab:>11s}" for lab in GB_LABELS)
+
+    def row(label, v, fmt="{:+11.3f}"):
+        print(f"  {label:18s}" + "".join(fmt.format(x) for x in v))
+
+    print(f"rho_crit = {rho_crit:.1f}; headline rung {HEADLINE:g} rho_crit = "
+          f"{HEADLINE * rho_crit:.0f}")
+
+    print("\n-- no glitch in the data (rung 0): maxima --")
+    print(f"  {'':18s}{head}")
+    for a in ("fd_gbonly", "wdm_gbonly"):
+        row(a + " clean", U["z_clean"][r0, j[a]])
+        row(a + " noisy", U["z_noisy"][r0, j[a]])
+    print(f"  max |fd_gbonly - wdm_gbonly|, stored noise draw: "
+          f"{np.abs(U['z_noisy'][r0, j['fd_gbonly']] - U['z_noisy'][r0, j['wdm_gbonly']]).max():.1e}")
+    print(f"  max |fd_joint (glitch in data, rung {HEADLINE:g}) - fd_gbonly (rung 0)|, "
+          f"stored draw: {np.abs(U['z_noisy'][rh, j['fd_joint']] - U['z_noisy'][r0, j['fd_gbonly']]).max():.4f}")
+
+    print(f"\n-- glitch in the data, {HEADLINE:g} rho_crit: noiseless maxima --")
+    print(f"  {'':18s}{head}")
+    for a in names:
+        row(a, U["z_clean"][rh, j[a]])
+    print(f"  max |wdm_gbonly - fd_gbonly| = "
+          f"{np.abs(U['z_clean'][rh, j['wdm_gbonly']] - U['z_clean'][rh, j['fd_gbonly']]).max():.1e}, "
+          f"max |wdm_split - fd_gbonly| = "
+          f"{np.abs(U['z_clean'][rh, j['wdm_split']] - U['z_clean'][rh, j['fd_gbonly']]).max():.1e}")
+
+    for tag in ("scattercrit", "scatter"):
+        if f"{tag}_z" not in U:
+            print(f"\n({tag} not merged into unmodelled.npz)")
+            continue
+        z = U[f"{tag}_z"]
+        n = z.shape[0]
+        print(f"\n-- {n} noise draws at rho_gl = {float(U[tag + '_rho']):.0f}: "
+              f"mean displacement +- standard error --")
+        print(f"  {'':18s}{head}")
+        for a in names:
+            m, se = z[:, j[a]].mean(axis=0), z[:, j[a]].std(axis=0) / np.sqrt(n)
+            print(f"  {a:12s}" + "".join(f"{x:+6.2f}+-{e:.2f}" for x, e in zip(m, se)))
+        print(f"  draw by draw: max |wdm_sub - fd_joint| = "
+              f"{np.abs(z[:, j['wdm_sub']] - z[:, j['fd_joint']]).max():.4f}, "
+              f"max |wdm_split - fd_gbonly| = "
+              f"{np.abs(z[:, j['wdm_split']] - z[:, j['fd_gbonly']]).max():.4f}, "
+              f"max |wdm_gbonly - fd_gbonly| = "
+              f"{np.abs(z[:, j['wdm_gbonly']] - z[:, j['fd_gbonly']]).max():.4f}")
+
+    print(f"\n-- chains at {HEADLINE:g} rho_crit on the stored draw --")
+    ref = U["chain_fd_joint"][:, :4].std(axis=0)
+    print(f"  {'':18s}{head}")
+    for a in ("fd_joint", "fd_gbonly", "wdm_split", "wdm_sub", "wdm_cut"):
+        ch = U[f"chain_{a}"]
+        row(a + " width", ch[:, :4].std(axis=0) / ref, "{:11.3f}")
+    for a in ("fd_joint", "fd_gbonly", "wdm_split", "wdm_sub", "wdm_cut"):
+        ch, t = U[f"chain_{a}"], U[f"true_{a}"]
+        z = (np.median(ch, axis=0) - t) / ch.std(axis=0)
+        row(a + " median", z[:4], "{:+11.2f}")
+        if ch.shape[1] == 7:
+            print(f"  {'':12s}glitch block (t0, log A_g, log tau): "
+                  + " ".join(f"{x:+.2f}" for x in z[4:]))
+
+
 def main():
     if len(sys.argv) > 1:
         phase = sys.argv[1]
@@ -766,8 +843,10 @@ def main():
         if phase == "figure":
             import make_fig_unmodelled
             return make_fig_unmodelled.main()
+        if phase == "table":
+            return table()
         if phase not in PHASES:
-            raise SystemExit(f"phase must be one of {PHASES + ('merge', 'figure')}")
+            raise SystemExit(f"phase must be one of {PHASES + ('merge', 'figure', 'table')}")
         extra = sys.argv[2:]
         if extra and phase != "chains":
             raise SystemExit("only `chains` takes a list of analyses")

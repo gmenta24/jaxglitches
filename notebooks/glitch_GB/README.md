@@ -24,7 +24,9 @@ across analyses and not merely their widths; see Sec. "What the split costs".
 | File | Question it answers | Produces | Runtime |
 |---|---|---|---|
 | `run_gb_free_sky.py` | does separating glitch from binary need the binary localised? | `gb_free_sky.npz` | ~1.5 h, GPU |
-| `run_wdm_tdi2.py` | does the time--frequency split depend on the TDI generation? | `wdm_tdi2.npz` | ~1 h, GPU |
+| `run_wdm_tdi2.py` | does the time--frequency split depend on the TDI generation, and through which piece of the transfer function? | `wdm_tdi2.npz`, `wdm_tdi2_mechanism.npz` | ~1 h, GPU; `mechanism` ~5 min, CPU |
+| `run_wdm_windows.py` | where does the glitch window lose SNR, and what does cutting a segment do to the noise? | `wdm_windows.npz` | ~3 min, CPU |
+| `run_gb_only.py` | is the Fisher/MCMC mismatch in psi and fdot the binary's or the glitch's? | `gb_only.npz` | ~1 min, CPU |
 | `run_knee_scan.py` | how far from the fiducial configuration does the glitch/binary separation survive? | `knee_scan.npz`, `knee_mcmc.npz`, `fig_knee_scan.pdf` | ~40 min, GPU |
 | `run_lpf_snr.py` | how loud are LPF-like glitches, seen by LISA on this grid? | `lpf_snr.npz` | ~2 min |
 | `run_unmodelled.py` | what breaks if the glitch is *not* modelled, in each representation? | `unmodelled.npz`, `fig_unmodelled.pdf` | ~2 h, GPU |
@@ -47,6 +49,19 @@ draws each, at 4 rho_crit and at rho_crit, to tell a bias from a draw) and `chai
 posteriors themselves). `merge` collects them, `figure` draws. It is the script that
 found the blind spot in the split likelihood described below.
 
+`run_wdm_tdi2.py` has two phases outside its default run. `mechanism` takes the
+generation transfer function apart -- magnitude, quarter-cycle phase, delay -- applies
+each piece to noise draws, and then lengthens the glitch window in time; it writes its
+own `wdm_tdi2_mechanism.npz` and is never merged into `wdm_tdi2.npz`, so re-running it
+cannot make `fig_wdm_tdi` look stale. `report` only prints: the statistics the paper
+quotes from the stored chains and Laplace comparisons. `run_unmodelled.py table` does the
+same for the paper's summary table of the six analyses.
+
+`run_wdm_windows.py` has two phases, `wrap` (the glitch's rho^2 by time bin, what the
+window keeps, what the notch removes) and `segments` (whitened noise in segments cut from
+the year, as cut, with the slow noise removed first, and transformed inside a stretch
+three times longer). Neither builds a likelihood.
+
 `run_knee_scan.py` has five modes, and the ones that are not the scan matter as much
 as the scan: `--check` verifies that the degradation and correlation it reports are
 independent of both signal amplitudes, `--t0check` verifies that maximising the bias
@@ -64,7 +79,7 @@ reshape is `(n_walker, n_iter, dim)`. Reading it the other way round makes walke
 look correlated at 0.8 and shrinks every autocorrelation time by an order of
 magnitude; `run_convergence.py` checks the layout before trusting it.
 
-## Five results worth knowing before reusing this code
+## Seven results worth knowing before reusing this code
 
 **The split likelihood never subtracts the glitch from the binary's window.** Eq. (38)
 of the paper models `W_GB` with `h_GB` and `W_gl` with `h_gl`, and that is what makes
@@ -77,6 +92,24 @@ and it appears. Two repairs work and both are in that script: model `W_GB` with
 `h_GB + h_gl` (`wdm_sub`, exact, one extra transform per call), or excise the time bins
 carrying the onset (`wdm_cut`, needs no glitch model at all, costs a few per cent of the
 binary's SNR).
+
+**The glitch window misses a sixth of the glitch, round the back.** The WDM transform
+is periodic and the fiducial onset is 400 s into the year, so the glitch's footprint
+straddles the join: on the `Nf = 128` tiling the *last* time bin carries 17% of its
+rho^2. `W_gl` starts at bin 0 and keeps 90.0% of the SNR; adding bins 1462-1463 would
+keep 99.2% (`run_wdm_windows.py wrap`). That is safe here only because the simulated
+noise is periodic too. On real data the join carries a red-noise jump -- the same one
+that makes a short segment fail -- and the wrapped bins would pick it up.
+
+**In the WDM domain TDI-1 and TDI-2 differ through the phase, not the magnitude.** The
+transfer function between them is `2 sin(4 pi f L) * i * exp(-4 pi i f L)`. Its
+magnitude varies across a channel, which looks like the culprit and is not: applied on
+its own it leaves the glitch estimate's noise 0.999 correlated between generations. The
+quarter-cycle `i` alone drops that to 0.58, because it swaps each wavelet for its
+quadrature partner, which lives in the neighbouring *time* bins, and `W_gl` is four time
+bins long. Adding the two wrapped bins brings it to 0.97, and eight more on either side
+to 0.999 (`run_wdm_tdi2.py mechanism`). A windowed time--frequency null test between
+generations therefore has a floor set by the window's length in time.
 
 **One Newton step is not enough.** The `(log f0, log fdot)` block is ill-conditioned
 (cond(H) ≈ 1e17), so an undamped step from the injected values overshoots to a
