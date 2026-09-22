@@ -8,8 +8,9 @@ wrap
     Where the glitch's rho^2 sits on the N_f = 128 tiling, time bin by time bin, and how
     much of it the glitch window W_gl keeps. The transform is periodic and the onset is
     400 s into the record, so the glitch's footprint straddles the join and the last time
-    bin of the year carries a sixth of its rho^2. W_gl starts at bin 0, so it misses that
-    part: it keeps 90% of the SNR, and adding the two wrapped bins would keep 99%. Also
+    bin of the year carries a sixth of its rho^2. A window starting at bin 0, as the first
+    version of W_gl did, misses that part and keeps 90% of the SNR; W_gl now includes the
+    two wrapped bins, 1462-1463, and keeps 99%. Also
     measured: how much of the glitch the three-channel notch removes, and how loud the
     binary is in the notched pixels. Those two decide whether subtracting the binary
     there, instead of notching, could recover glitch SNR. It could not, since the notch
@@ -64,7 +65,7 @@ BACKEND = get_backend("jax")
 DS = np.load(HERE / "dataset.npz")
 DT, N, T_OBS = float(DS["DT"]), int(DS["N"]), float(DS["T_OBS"])
 NF_GL = 128                        # the glitch tiling of the paper
-NT_WIN = 4                         # time bins in W_gl
+NT_WIN, N_WRAP = 4, 2              # W_gl: bins 0-3 and the two wrapped bins before them
 F0 = float(DS["gb_true"][0])
 freq = np.fft.rfftfreq(N, DT)
 f_safe = np.where(freq > 0, freq, 1.0)
@@ -110,17 +111,18 @@ def phase_wrap():
         sub = np.asarray(w.coeffs)[:, bins][:, :, chans] ** 2 / var[:, bins][:, :, chans]
         return float(np.sqrt(sub.sum()))
 
-    first, wrapped = np.arange(NT_WIN), np.array([nt - 2, nt - 1])
-    variants = {"W_gl as in the paper (bins 0-3, notch)": (first, kept_ch),
+    first, wrapped = np.arange(NT_WIN), np.arange(nt - N_WRAP, nt)
+    variants = {"bins 0-3, notch (first W_gl)": (first, kept_ch),
                 "bins 0-3, no notch": (first, interior),
-                "bins 0-3 + wrapped 1462-1463, notch": (np.r_[wrapped, first], kept_ch),
+                "W_gl: wrapped 1462-1463 + 0-3, notch": (np.r_[wrapped, first], kept_ch),
                 "all time bins, notch": (np.arange(nt), kept_ch)}
     kept = {k: snr_kept(*v) for k, v in variants.items()}
-    notch_share = float(P[:, first][:, :, np.searchsorted(interior, notch)].sum() / rho2_wdm)
+    gl_t = np.r_[wrapped, first]
+    notch_share = float(P[:, gl_t][:, :, np.searchsorted(interior, notch)].sum() / rho2_wdm)
 
     wb = wdm_of(to_time(DS["h_gb_tdi1"]), nt)
     Pb = np.asarray(wb.coeffs) ** 2 / var
-    gb_in_notch = float(np.sqrt(Pb[:, first][:, :, notch].sum()))
+    gb_in_notch = float(np.sqrt(Pb[:, gl_t][:, :, notch].sum()))
     gb_notch_year = float(np.sqrt(Pb[:, :, notch].sum()))
 
     order = np.argsort(rho2_bin)[::-1]
@@ -131,7 +133,7 @@ def phase_wrap():
     print("  SNR kept, as a fraction of the frequency-domain SNR:")
     for k, v in kept.items():
         print(f"    {k:40s} {v:6.2f}  ({100 * v / rho_fd:.1f}%)")
-    print(f"  share of rho^2 in the notch pixels of bins 0-3: {100 * notch_share:.2f}%")
+    print(f"  share of rho^2 in the notch pixels of W_gl's time bins: {100 * notch_share:.2f}%")
     print(f"  binary SNR in those pixels: {gb_in_notch:.1f}  "
           f"(in the three notch channels over the whole year: {gb_notch_year:.1f})")
     return dict(wrap_rho2_bin=rho2_bin / rho2_wdm, wrap_rho_fd=rho_fd,

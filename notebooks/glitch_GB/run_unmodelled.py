@@ -47,6 +47,10 @@ Phases
     python run_unmodelled.py ladder         # MAP bias vs glitch amplitude
     python run_unmodelled.py scatter        # is the shift a bias or a draw? 24 draws
     python run_unmodelled.py chains         # the posteriors themselves, at 4 rho_crit
+    python run_unmodelled.py seeds          # seed-to-seed scatter of those widths
+    python run_unmodelled.py scatter wdm_split wdm_sub
+                                            # any phase but probe: re-run only the named
+                                            # analyses, carry the rest over
     python run_unmodelled.py figure         # paper/figures/fig_unmodelled.pdf
     python run_unmodelled.py table          # print the numbers of the paper's summary
                                             # table (tab:unmodelled) from unmodelled.npz
@@ -103,6 +107,11 @@ N_WALKERS = 16
 # negative definite -- and needed it.
 N_BURN = int(os.environ.get("UNMODELLED_NBURN", 2_000))
 N_SAMP = int(os.environ.get("UNMODELLED_NSAMP", 10_000))
+# The seed of `chains`. Overridable because a chain can fail to explore this posterior
+# without its own diagnostics noticing: the first wdm_split run with the six-bin glitch
+# window came back 11% narrow in log f0, five standard deviations below sixteen
+# fd_gbonly runs of the same binary posterior (`seeds`), and was re-run from seed 17.
+CHAIN_SEED = int(os.environ.get("UNMODELLED_CHAIN_SEED", 7))
 GB_LABELS = ["log_f0", "log_fdot", "log_A_gb", "psi"]
 ALL_LABELS = GB_LABELS + ["t0", "log_Ag", "log_tau"]
 ANALYSES = ("fd_joint", "fd_gbonly", "wdm_split", "wdm_sub", "wdm_gbonly", "wdm_cut")
@@ -174,8 +183,11 @@ VAR_GL = pixel_variance(FREQ_GL, NT_GL, NF_GL)
 
 K_GB = int(np.argmin(np.abs(FREQ_GB - F0_TRUE)))
 GB_CH = jnp.arange(max(1, K_GB - 2), min(NF_GB, K_GB + 3))
-NT_WIN = 4
-GL_T = jnp.arange(NT_WIN)
+# W_gl: the four time bins from the onset on, and the two before it, which the periodic
+# transform puts at the end of the year. Same window as glitch_and_gb_wdm.ipynb and
+# run_wdm_tdi2.py; only wdm_split and wdm_sub read it.
+NT_WIN, N_WRAP = 4, 2
+GL_T = jnp.asarray(np.r_[np.arange(NT_GL - N_WRAP, NT_GL), np.arange(NT_WIN)])
 K_NOTCH = int(np.argmin(np.abs(FREQ_GL - F0_TRUE)))
 GL_CH = jnp.asarray([m for m in range(1, NF_GL) if abs(m - K_NOTCH) > 1])
 T0_MAX = float(TIME_GL[NT_WIN - 1])
@@ -572,21 +584,55 @@ def phase_probe():
 # phase: ladder
 # ---------------------------------------------------------------------------
 
-def phase_ladder():
+def _subset(only):
+    """Indices into ANALYSES to (re)compute: all of them, or the named ones."""
+    if not only:
+        return list(range(len(ANALYSES)))
+    bad = [a for a in only if a not in ANALYSES]
+    if bad:
+        raise SystemExit(f"unknown analyses {bad}; choose from {ANALYSES}")
+    return [ANALYSES.index(a) for a in only]
+
+
+def _previous(phase, only):
+    """The stored result of `phase`, which a subset run updates in place."""
+    if not only:
+        return None
+    prev = _out(phase)
+    if not prev.exists():
+        raise FileNotFoundError(f"{prev} missing -- run the full phase first")
+    print(f"re-running only {list(only)}; the rest are carried over unchanged")
+    return dict(np.load(prev, allow_pickle=True))
+
+
+def phase_ladder(only=None):
     """Bias of the four binary parameters against glitch amplitude, five analyses,
-    on noiseless data and on the stored noise draw."""
+    on noiseless data and on the stored noise draw.
+
+    `only` re-computes the named analyses and carries the others over from the stored
+    file, as `phase_chains` does -- used when a change touches some analyses and not
+    others, such as the glitch window, which only wdm_split and wdm_sub read.
+    """
     rho_crit = float(np.load(_out("probe"))["rho_crit_fid"])
     print(f"rho_crit = {rho_crit:.1f} (injected arrival time)")
-    z = {k: np.zeros((len(RUNGS), len(ANALYSES), 4)) for k in ("clean", "noisy")}
-    sig = {k: np.zeros((len(RUNGS), len(ANALYSES), 4)) for k in ("clean", "noisy")}
-    conv = {k: np.zeros((len(RUNGS), len(ANALYSES)), bool) for k in ("clean", "noisy")}
+    prev = _previous("ladder", only)
+    todo = _subset(only)
+    if prev is None:
+        z = {k: np.zeros((len(RUNGS), len(ANALYSES), 4)) for k in ("clean", "noisy")}
+        sig = {k: np.zeros((len(RUNGS), len(ANALYSES), 4)) for k in ("clean", "noisy")}
+        conv = {k: np.zeros((len(RUNGS), len(ANALYSES)), bool) for k in ("clean", "noisy")}
+    else:
+        z = {k: prev[f"z_{k}"].copy() for k in ("clean", "noisy")}
+        sig = {k: prev[f"sig_{k}"].copy() for k in ("clean", "noisy")}
+        conv = {k: prev[f"conv_{k}"].copy() for k in ("clean", "noisy")}
     for i, rung in enumerate(RUNGS):
         scale = rung * rho_crit / RHO_GL1
         dv = max(scale, 1e-12) * DELTAV_TRUE
         print(f"\n-- rho_gl = {rung:g} rho_crit = {rung * rho_crit:8.1f}, "
               f"Deltav = {dv:.3e} m/s", flush=True)
         for tag, nz in (("clean", jnp.zeros_like(NOISE)), ("noisy", NOISE)):
-            for j, name in enumerate(ANALYSES):
+            for j in todo:
+                name = ANALYSES[j]
                 x, s, t, ok = fit(name, data_at(scale, nz), dv)
                 z[tag][i, j], sig[tag][i, j] = (x - t) / s, s
                 conv[tag][i, j] = ok
@@ -605,18 +651,27 @@ def phase_ladder():
 # phase: scatter
 # ---------------------------------------------------------------------------
 
-def _scatter(rung, tag):
-    """A displacement on one noise draw is not a bias. Repeat over independent draws."""
+def _scatter(rung, tag, only=None):
+    """A displacement on one noise draw is not a bias. Repeat over independent draws.
+
+    The draws are keyed on fixed seeds, so `only` can re-compute some analyses on the
+    same realisations and carry the others over from the stored file."""
     rho_crit = float(np.load(_out("probe"))["rho_crit_fid"])
     scale = rung * rho_crit / RHO_GL1
     dv = scale * DELTAV_TRUE
     print(f"== {N_REALISATIONS} noise realisations at rho_gl = {rung * rho_crit:.0f} "
           f"= {rung:g} rho_crit ==", flush=True)
-    z = np.zeros((N_REALISATIONS, len(ANALYSES), 4))
-    conv = np.zeros((N_REALISATIONS, len(ANALYSES)), bool)
+    prev = _previous(tag, only)
+    todo = _subset(only)
+    if prev is None:
+        z = np.zeros((N_REALISATIONS, len(ANALYSES), 4))
+        conv = np.zeros((N_REALISATIONS, len(ANALYSES)), bool)
+    else:
+        z, conv = prev[f"{tag}_z"].copy(), prev[f"{tag}_conv"].copy()
     for s_ in range(N_REALISATIONS):
         nz = ns.sample_noise_fd(jr.split(jr.PRNGKey(2000 + s_))[0], PSD).at[0].set(0 + 0j)
-        for j, name in enumerate(ANALYSES):
+        for j in todo:
+            name = ANALYSES[j]
             x, sg, t, ok = fit(name, data_at(scale, nz), dv)
             z[s_, j] = (x - t) / sg
             conv[s_, j] = ok
@@ -634,14 +689,14 @@ def _scatter(rung, tag):
             f"{tag}_rung": rung}
 
 
-def phase_scatter():
-    return _scatter(HEADLINE, "scatter")
+def phase_scatter(only=None):
+    return _scatter(HEADLINE, "scatter", only)
 
 
-def phase_scattercrit():
+def phase_scattercrit(only=None):
     """The same at exactly rho_crit, where the one-sigma definition is testable and the
     displacement is small enough for the maximum and the median to still agree."""
-    return _scatter(1.0, "scattercrit")
+    return _scatter(1.0, "scattercrit", only)
 
 
 # ---------------------------------------------------------------------------
@@ -709,11 +764,12 @@ def phase_chains(only=None):
         print(f"\n[{name}] dim {dim}, {1e3 * per:.2f} ms/call -> "
               f"{per * N_WALKERS * (N_BURN + N_SAMP) / 60:.1f} min", flush=True)
         t0 = time.time()
-        ch = run_chain(log_lik, x, s, dim, seed=7)
+        ch = run_chain(log_lik, x, s, dim, seed=CHAIN_SEED)
         print(f"[{name}] {ch.shape} in {time.time() - t0:.0f} s", flush=True)
         t = np.asarray(theta_true(dv)[:dim])
         med, sg = np.median(ch, axis=0), ch.std(axis=0)
         out[f"chain_{name}"] = ch
+        out[f"seed_chain_{name}"] = CHAIN_SEED
         out[f"map_{name}"] = x
         out[f"true_{name}"] = t
         print(f"   {'param':10s}{'median-truth':>14s}{'in sigma':>10s}{'sigma':>12s}")
@@ -725,10 +781,56 @@ def phase_chains(only=None):
     return out
 
 
+def phase_seeds(only=None):
+    """Seed-to-seed scatter of sampled widths and medians, at the headline rung.
+
+    The glitch-free posteriors of this section are 17 times wider in log fdot than the
+    joint one and reach the prior wall, and their chains mix slowly. Their
+    autocorrelation diagnostics look acceptable and their halves agree -- yet two runs of
+    wdm_split differing only in the glitch window, which does not enter its binary block,
+    returned log f0 widths 11% apart. The spread between independent runs is the honest
+    Monte Carlo error on such a width, and this measures it on fd_gbonly, the cheapest
+    analysis with the same binary posterior: a few chains of the same length as the
+    wdm_split one, from different seeds, on the stored noise draw.
+
+    Seeds come from UNMODELLED_SEEDS (default 8,9,10,11; the stored chains use 7).
+    """
+    rho_crit = float(np.load(_out("probe"))["rho_crit_fid"])
+    scale = HEADLINE * rho_crit / RHO_GL1
+    dv = scale * DELTAV_TRUE
+    data = data_at(scale)
+    seeds = [int(v) for v in os.environ.get("UNMODELLED_SEEDS", "8,9,10,11").split(",")]
+    names = list(only) if only else ["fd_gbonly"]
+    print(f"sampler: {N_WALKERS} walkers, {N_BURN} burn + {N_SAMP} samples; seeds {seeds}")
+    out = {}
+    for name in names:
+        log_lik, dim = BUILDERS[name](data)
+        lp = PRIOR[dim]
+        log_post = jax.jit(lambda th: log_lik(th) + lp(th))
+        x, sg, ok = newton(log_post, theta_true(dv)[:dim])
+        t = np.asarray(theta_true(dv)[:dim])
+        med, wid = [], []
+        for seed in seeds:
+            t0 = time.time()
+            ch = run_chain(log_lik, x, sg, dim, seed=seed)
+            med.append(np.median(ch, axis=0))
+            wid.append(ch.std(axis=0))
+            print(f"[{name}] seed {seed}: {time.time() - t0:.0f} s; widths "
+                  + " ".join(f"{v:.4g}" for v in wid[-1][:4]) + "; median-truth / width "
+                  + " ".join(f"{v:+.2f}" for v in ((med[-1] - t) / wid[-1])[:4]), flush=True)
+            del ch
+        out[f"seed_list_{name}"] = np.array(seeds)
+        out[f"seed_median_{name}"] = np.array(med)
+        out[f"seed_width_{name}"] = np.array(wid)
+        out[f"seed_true_{name}"] = t
+        jax.clear_caches()
+    return out
+
+
 # ---------------------------------------------------------------------------
 # merge and drive
 # ---------------------------------------------------------------------------
-PHASES = ("probe", "ladder", "scatter", "scattercrit", "chains")
+PHASES = ("probe", "ladder", "scatter", "scattercrit", "chains", "seeds")
 
 
 def _out(phase):
@@ -848,9 +950,9 @@ def main():
         if phase not in PHASES:
             raise SystemExit(f"phase must be one of {PHASES + ('merge', 'figure', 'table')}")
         extra = sys.argv[2:]
-        if extra and phase != "chains":
-            raise SystemExit("only `chains` takes a list of analyses")
-        res = phase_chains(extra) if phase == "chains" and extra \
+        if extra and phase == "probe":
+            raise SystemExit("`probe` does not take a list of analyses")
+        res = globals()[f"phase_{phase}"](extra) if extra \
             else globals()[f"phase_{phase}"]()
         np.savez_compressed(_out(phase), **res)
         print(f"saved {_out(phase)}")

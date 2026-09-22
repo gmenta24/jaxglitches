@@ -26,6 +26,7 @@ across analyses and not merely their widths; see Sec. "What the split costs".
 | `run_gb_free_sky.py` | does separating glitch from binary need the binary localised? | `gb_free_sky.npz` | ~1.5 h, GPU |
 | `run_wdm_tdi2.py` | does the time--frequency split depend on the TDI generation, and through which piece of the transfer function? | `wdm_tdi2.npz`, `wdm_tdi2_mechanism.npz` | ~1 h, GPU; `mechanism` ~5 min, CPU |
 | `run_wdm_windows.py` | where does the glitch window lose SNR, and what does cutting a segment do to the noise? | `wdm_windows.npz` | ~3 min, CPU |
+| `run_wdm_segments.py` | what does a short segment do to the glitch fit, and does padding (or mirroring) the segment fix it? | `wdm_segments_fits.npz`, `wdm_segments_scatter.npz` | ~3 min + ~30 min, CPU |
 | `run_gb_only.py` | is the Fisher/MCMC mismatch in psi and fdot the binary's or the glitch's? | `gb_only.npz` | ~1 min, CPU |
 | `run_knee_scan.py` | how far from the fiducial configuration does the glitch/binary separation survive? | `knee_scan.npz`, `knee_mcmc.npz`, `fig_knee_scan.pdf` | ~40 min, GPU |
 | `run_lpf_snr.py` | how loud are LPF-like glitches, seen by LISA on this grid? | `lpf_snr.npz` | ~2 min |
@@ -42,11 +43,14 @@ first calibrates the hybrid binned likelihood over 100 realisations, the second 
 the same realisations through the decimated likelihood of `fd_pipeline.build_decimated`
 to show what a stride costs. Both are CPU-parallel and resumable; ~2 h on 20 cores.
 
-`run_unmodelled.py` runs in five phases, each in its own process for the same reason
+`run_unmodelled.py` runs in six phases, each in its own process for the same reason
 as `run_wdm_tdi2.py`: `probe` (window geometry, the excision trade-off, the linearised
 bias), `ladder` (bias against glitch amplitude), `scatter` and `scattercrit` (24 noise
-draws each, at 4 rho_crit and at rho_crit, to tell a bias from a draw) and `chains` (the
-posteriors themselves). `merge` collects them, `figure` draws. It is the script that
+draws each, at 4 rho_crit and at rho_crit, to tell a bias from a draw), `chains` (the
+posteriors themselves) and `seeds` (the same glitch-free posterior sampled from many
+seeds, to measure what a chain width is really known to). `merge` collects them, `figure`
+draws. Every phase but `probe` takes a list of analyses to re-run, carrying the others
+over unchanged; `UNMODELLED_CHAIN_SEED` sets the seed of `chains`. It is the script that
 found the blind spot in the split likelihood described below.
 
 `run_wdm_tdi2.py` has two phases outside its default run. `mechanism` takes the
@@ -79,7 +83,7 @@ reshape is `(n_walker, n_iter, dim)`. Reading it the other way round makes walke
 look correlated at 0.8 and shrinks every autocorrelation time by an order of
 magnitude; `run_convergence.py` checks the layout before trusting it.
 
-## Seven results worth knowing before reusing this code
+## Nine results worth knowing before reusing this code
 
 **The split likelihood never subtracts the glitch from the binary's window.** Eq. (38)
 of the paper models `W_GB` with `h_GB` and `W_gl` with `h_gl`, and that is what makes
@@ -93,23 +97,54 @@ and it appears. Two repairs work and both are in that script: model `W_GB` with
 carrying the onset (`wdm_cut`, needs no glitch model at all, costs a few per cent of the
 binary's SNR).
 
-**The glitch window misses a sixth of the glitch, round the back.** The WDM transform
-is periodic and the fiducial onset is 400 s into the year, so the glitch's footprint
+**The glitch window has to reach round the back of the year.** The WDM transform is
+periodic and the fiducial onset is 400 s into the year, so the glitch's footprint
 straddles the join: on the `Nf = 128` tiling the *last* time bin carries 17% of its
-rho^2. `W_gl` starts at bin 0 and keeps 90.0% of the SNR; adding bins 1462-1463 would
-keep 99.2% (`run_wdm_windows.py wrap`). That is safe here only because the simulated
-noise is periodic too. On real data the join carries a red-noise jump -- the same one
-that makes a short segment fail -- and the wrapped bins would pick it up.
+rho^2. A window starting at bin 0, which is what `W_gl` first was, keeps 90.0% of the
+SNR; `W_gl` now also keeps bins 1462-1463 and so 99.2% (`run_wdm_windows.py wrap`). The
+notebook, `run_wdm_tdi2.py` and `run_unmodelled.py` all use that six-bin window, and the
+results of the four-bin one are kept in `superseded_4bin_window/`. Including the wrapped
+bins is safe here only because the simulated noise is periodic too. On real data the join
+carries a red-noise jump -- the same one that makes a short segment fail -- and the
+wrapped bins would pick it up.
 
 **In the WDM domain TDI-1 and TDI-2 differ through the phase, not the magnitude.** The
 transfer function between them is `2 sin(4 pi f L) * i * exp(-4 pi i f L)`. Its
 magnitude varies across a channel, which looks like the culprit and is not: applied on
 its own it leaves the glitch estimate's noise 0.999 correlated between generations. The
-quarter-cycle `i` alone drops that to 0.58, because it swaps each wavelet for its
-quadrature partner, which lives in the neighbouring *time* bins, and `W_gl` is four time
-bins long. Adding the two wrapped bins brings it to 0.97, and eight more on either side
-to 0.999 (`run_wdm_tdi2.py mechanism`). A windowed time--frequency null test between
-generations therefore has a floor set by the window's length in time.
+quarter-cycle `i` alone drops that to 0.58 in a window of the four bins from the onset
+on, because it swaps each wavelet for its quadrature partner, which lives in the
+neighbouring *time* bins. With the two wrapped bins of `W_gl` it is 0.97, and with twenty
+bins 0.999 (`run_wdm_tdi2.py mechanism`). A windowed time--frequency null test between
+generations therefore has a floor set by the window's length in time: over 48 noise draws
+the glitch-block difference between generations scatters by 0.2 sigma with `W_gl`, and by
+0.64 sigma with the four-bin window (whose results are in `superseded_4bin_window/`).
+
+**A short segment fails by scatter, not by bias, and padding cures it.** Transforming a
+segment of the year instead of the whole of it looks free and is not: the segment's two
+ends do not meet in red noise, the transform joins them anyway, and the glitch at the
+join is fitted against a noise model that does not know about the jump.
+`run_wdm_segments.py` rebuilt that likelihood (the original was never kept). On the stored
+realisation a 7.9-day segment gives A_g x1.89, 10.4 sigma out, which is where the old
+"factor two" came from, but over 24 draws the error has no consistent sign: the log A_g
+displacement scatters by 5 posterior widths at 7.9 d and by 21-57 at 23.7-89.9 d, with
+half or more of the draws beyond 3 sigma. Transforming a stretch three times longer and
+keeping its middle third matches the full year to 0.01 sigma in every draw. Where there
+is no data to pad with -- a glitch at the start of a real record -- mirroring the start in
+front of it recovers the estimate but not its width: the diagonal noise model counts the
+reflected noise twice, the window SNR comes out at 58.5 instead of 42.4, and the Laplace
+widths are 28% too narrow.
+
+**A chain can fail to explore a posterior and pass every internal check.** At 4 rho_crit
+the glitch-free binary posterior of `run_unmodelled.py` is 17 times wider in fdot than
+the joint one and runs into the prior. A 25 000-iteration `wdm_split` chain on it (seed
+7, kept as `unmodelled_chains_wdm_split_seed7.npz`) came back 11% narrow in log f0 and 6%
+in psi, while its quarters, walker halves, tau_int and R-hat all looked fine. Sixteen
+`fd_gbonly` chains of the same length and the same binary posterior from different seeds
+(`run_unmodelled.py seeds`, about a minute each on a GPU) put the spread of a width at
+1-2% and of a median at 0.1 sigma, which puts that run five standard deviations out; a
+re-run from seed 17 (`UNMODELLED_CHAIN_SEED`) lands within 1.4. For a slowly mixing
+posterior, compare independent runs before quoting a width.
 
 **One Newton step is not enough.** The `(log f0, log fdot)` block is ill-conditioned
 (cond(H) ≈ 1e17), so an undamped step from the injected values overshoots to a

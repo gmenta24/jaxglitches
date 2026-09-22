@@ -13,9 +13,11 @@ multiplied by -TF_X1(f) = 2 sin(4 pi f L) * i * exp(-4 pi i f L): a magnitude, a
 quarter-cycle phase and a delay of 2L. A WDM pixel is a weighted sum over its channel,
 and the quarter-cycle swaps each wavelet for its quadrature partner, which the basis
 (one phase per pixel) carries mostly in the neighbouring time bins. The binary's window
-keeps every time bin of its channels and cannot tell; the glitch's window keeps four,
-so content crosses its edges and each generation keeps a different part of the same
-noise realisation. The obvious suspect -- the magnitude varying across a channel while
+keeps every time bin of its channels and cannot tell; the glitch's window keeps six,
+so content crosses its edges and each generation keeps a slightly different part of the
+same noise realisation. With a four-bin window, which misses the part of the glitch's
+footprint that wraps round the end of the year, that difference is several times
+larger. The obvious suspect -- the magnitude varying across a channel while
 the pixel variance of Eq. (wdmvar) takes it at the channel centre -- turns out to be
 negligible. The comparison therefore measures the size of an effect instead of testing
 an identity, and this script separates the things that can produce a difference:
@@ -166,8 +168,13 @@ VAR |= {(g, "gl"): pixel_variance(FREQ_GL, NT_GL, NF_GL, g) for g in (1, 2)}
 
 K_GB = int(np.argmin(np.abs(FREQ_GB - F0_TRUE)))
 GB_CH = jnp.arange(max(1, K_GB - 2), min(NF_GB, K_GB + 3))
-NT_WIN = 4
-GL_T = jnp.arange(NT_WIN)
+# W_gl: the four time bins from the onset on, and the two before it. The transform is
+# periodic and the onset is 400 s into the record, so those two are the last two bins
+# of the year; bin 1463 alone carries 17% of the glitch's rho^2
+# (`run_wdm_windows.py wrap`). Keeping bins 0-3 only, as a first version did, keeps
+# 90.0% of the SNR; this keeps 99.2%.
+NT_WIN, N_WRAP = 4, 2
+GL_T = jnp.asarray(np.r_[np.arange(NT_GL - N_WRAP, NT_GL), np.arange(NT_WIN)])
 K_NOTCH = int(np.argmin(np.abs(FREQ_GL - F0_TRUE)))
 GL_CH = jnp.asarray([m for m in range(1, NF_GL) if abs(m - K_NOTCH) > 1])
 
@@ -351,53 +358,64 @@ def _pieces():
 
 # Glitch windows of growing length, as (label, bins before bin 0, bins after bin 3).
 # `None` keeps every time bin of the year.
-MECH_WINDOWS = (("bins 0-3 (the paper's)", 0, 0),
-                ("+ wrapped bins 1462-1463", 2, 0),
+MECH_WINDOWS = (("bins 0-3", 0, 0),
+                ("+ wrapped bins 1462-1463 (W_gl)", 2, 0),
                 ("2 more either side", 2, 2),
                 ("4 more either side", 4, 4),
                 ("8 more either side", 8, 8),
                 ("all time bins", None, None))
+# The windows the transfer function is taken apart in: bins 0-3, the window of the first
+# version of this analysis, where the effect is large enough to dissect, and W_gl.
+PIECE_WINDOWS = (("bins 0-3", np.arange(NT_WIN)),
+                 ("W_gl", np.asarray(GL_T)))
 
 
 def phase_mechanism():
     """Which part of the transfer function makes the glitch window generation-dependent?
 
     The yardstick is the quantity that drives the glitch amplitude estimate: the noise's
-    matched-filter projection onto the glitch template inside W_gl, (n|h)/rho. For TDI-1
-    and for each piece of the transfer function it is computed on the same noise draws,
-    and the two are compared by their correlation and by the spread of their difference.
-    A piece that does nothing gives correlation 1. The pixel-by-pixel correlation of the
-    whitened noise is recorded as well, in both windows.
+    matched-filter projection onto the glitch template inside a glitch window, (n|h)/rho.
+    For TDI-1 and for each piece of the transfer function it is computed on the same noise
+    draws, and the two are compared by their correlation and by the spread of their
+    difference. A piece that does nothing gives correlation 1. The pixel-by-pixel
+    correlation of the whitened noise is recorded as well, in the glitch window and in
+    W_GB. All of this is done in the two windows of PIECE_WINDOWS.
 
-    The second half keeps the full transfer function and lengthens W_gl in time, bins
-    added on either side of the onset and wrapping round the end of the year. If the
-    difference comes from content crossing the window's time edges, it must shrink as
-    the window grows, and it does.
+    The second half keeps the full transfer function and lengthens the glitch window in
+    time, bins added on either side of the onset and wrapping round the end of the year.
+    If the difference comes from content crossing the window's time edges, it must shrink
+    as the window grows, and it does.
     """
     psd_bin = ns.psd_tdi1_array(f_safe, t_obs=T_OBS)
     h1 = np.asarray(DS["h_glitch_tdi1"])
     rho_fd = float(jg.snr(jnp.asarray(h1), psd_bin))
     pieces = _pieces()
     names = list(pieces)
-    gl_t, gl_ch, gb_ch = np.asarray(GL_T), np.asarray(GL_CH), np.asarray(GB_CH)
+    gl_ch, gb_ch = np.asarray(GL_CH), np.asarray(GB_CH)
 
     def coeffs(H, nt):
         return np.asarray(wdm_of(to_time(jnp.asarray(H)), nt).coeffs)
 
-    def win_gl(A):
-        return A[:, gl_t][:, :, gl_ch]
+    def sel(A, b):
+        return A[:, b][:, :, gl_ch]
 
     def win_gb(A):
         return A[:, :, gb_ch]
 
     var = {(g, k): np.asarray(VAR[(g, k)]) for g in (1, 2) for k in ("gl", "gb")}
     full_t = {1: coeffs(h1, NT_GL), 2: coeffs(pieces["full"][0][:, None] * h1, NT_GL)}
-    tmpl = {"tdi1": win_gl(full_t[1])}
-    vgl, vgb = {"tdi1": win_gl(var[(1, "gl")])}, {"tdi1": win_gb(var[(1, "gb")])}
+    # glitch templates over the whole glitch tiling, with the generation that sets the
+    # pixel variance, for TDI-1 and for each piece
+    plane = {"tdi1": (full_t[1], 1)}
     for name, (fac, gen) in pieces.items():
-        tmpl[name] = win_gl(coeffs(fac[:, None] * h1, NT_GL))
-        vgl[name], vgb[name] = win_gl(var[(gen, "gl")]), win_gb(var[(gen, "gb")])
-    rho = {k: float(np.sqrt(np.sum(tmpl[k] ** 2 / vgl[k]))) for k in tmpl}
+        plane[name] = (coeffs(fac[:, None] * h1, NT_GL), gen)
+    nw = len(PIECE_WINDOWS)
+    tmpl = [{k: sel(A, b) for k, (A, _) in plane.items()} for _, b in PIECE_WINDOWS]
+    vgl = [{k: sel(var[(g, "gl")], b) for k, (_, g) in plane.items()}
+           for _, b in PIECE_WINDOWS]
+    vgb = {k: win_gb(var[(g, "gb")]) for k, (_, g) in plane.items()}
+    rho = [{k: float(np.sqrt(np.sum(tmpl[w][k] ** 2 / vgl[w][k]))) for k in plane}
+           for w in range(nw)]
 
     bins = []
     for _, before, after in MECH_WINDOWS:
@@ -405,16 +423,14 @@ def phase_mechanism():
                     np.r_[np.arange(NT_GL - before, NT_GL), np.arange(0, NT_WIN + after)]
                     .astype(int))
 
-    def sel(A, b):
-        return A[:, b][:, :, gl_ch]
-
     wrho = np.array([[np.sqrt(np.sum(sel(full_t[g], b) ** 2 / sel(var[(g, "gl")], b)))
                       for g in (1, 2)] for b in bins])
 
     n = N_REALISATIONS
-    proj1 = np.zeros(n)
-    proj = np.zeros((len(names), n))
-    pix = np.zeros((len(names), n, 2))              # [W_gl, W_GB]
+    proj1 = np.zeros((nw, n))
+    proj = np.zeros((nw, len(names), n))
+    pix = np.zeros((nw, len(names), n))             # pixel correlation, glitch window
+    pix_gb = np.zeros((len(names), n))              # ... and in W_GB
     wproj = np.zeros((len(bins), n, 2))             # [TDI-1, full factor]
     print(f"== {n} noise draws, each through TDI-1 and {len(names)} pieces of the "
           f"transfer function ==", flush=True)
@@ -423,15 +439,22 @@ def phase_mechanism():
                                          psd_bin))
         nz[0] = 0.0
         c1_gl, c1_gb = coeffs(nz, NT_GL), coeffs(nz, NT_GB)
-        z1_gl = (win_gl(c1_gl) / np.sqrt(vgl["tdi1"])).ravel()
         z1_gb = (win_gb(c1_gb) / np.sqrt(vgb["tdi1"])).ravel()
-        proj1[s] = np.sum(win_gl(c1_gl) * tmpl["tdi1"] / vgl["tdi1"]) / rho["tdi1"]
+        z1_gl = [(sel(c1_gl, b) / np.sqrt(vgl[w]["tdi1"])).ravel()
+                 for w, (_, b) in enumerate(PIECE_WINDOWS)]
+        for w, (_, b) in enumerate(PIECE_WINDOWS):
+            proj1[w, s] = (np.sum(sel(c1_gl, b) * tmpl[w]["tdi1"] / vgl[w]["tdi1"])
+                           / rho[w]["tdi1"])
         for i, (name, (fac, gen)) in enumerate(pieces.items()):
             nv = fac[:, None] * nz
             cv_gl, cv_gb = coeffs(nv, NT_GL), coeffs(nv, NT_GB)
-            proj[i, s] = np.sum(win_gl(cv_gl) * tmpl[name] / vgl[name]) / rho[name]
-            pix[i, s] = (np.corrcoef(z1_gl, (win_gl(cv_gl) / np.sqrt(vgl[name])).ravel())[0, 1],
-                         np.corrcoef(z1_gb, (win_gb(cv_gb) / np.sqrt(vgb[name])).ravel())[0, 1])
+            for w, (_, b) in enumerate(PIECE_WINDOWS):
+                proj[w, i, s] = (np.sum(sel(cv_gl, b) * tmpl[w][name] / vgl[w][name])
+                                 / rho[w][name])
+                pix[w, i, s] = np.corrcoef(
+                    z1_gl[w], (sel(cv_gl, b) / np.sqrt(vgl[w][name])).ravel())[0, 1]
+            pix_gb[i, s] = np.corrcoef(
+                z1_gb, (win_gb(cv_gb) / np.sqrt(vgb[name])).ravel())[0, 1]
             if name == "full":
                 for j, b in enumerate(bins):
                     for g, c in ((1, c1_gl), (2, cv_gl)):
@@ -440,25 +463,30 @@ def phase_mechanism():
         if (s + 1) % 12 == 0:
             print(f"  {s + 1}/{n}", flush=True)
 
-    corr = np.array([np.corrcoef(proj1, p)[0, 1] for p in proj])
-    spread = np.array([np.std(p - proj1) for p in proj])
-    print(f"\nnoise projection onto the glitch template in W_gl, TDI-1 against each piece")
-    print(f"  (the window keeps SNR {rho['tdi1']:.2f} of {rho_fd:.2f} in TDI-1)")
-    print(f"  {'piece':15s}{'window SNR':>11s}{'corr':>8s}{'std diff':>10s}"
-          f"{'pixel corr W_gl':>17s}{'W_GB':>8s}")
-    for i, name in enumerate(names):
-        print(f"  {name:15s}{rho[name]:11.2f}{corr[i]:8.3f}{spread[i]:10.3f}"
-              f"{pix[i, :, 0].mean():17.3f}{pix[i, :, 1].mean():8.3f}")
+    corr = np.array([[np.corrcoef(proj1[w], p)[0, 1] for p in proj[w]] for w in range(nw)])
+    spread = np.array([[np.std(p - proj1[w]) for p in proj[w]] for w in range(nw)])
+    for w, (wlabel, _) in enumerate(PIECE_WINDOWS):
+        print(f"\nnoise projection onto the glitch template in {wlabel}, TDI-1 against "
+              f"each piece")
+        print(f"  (the window keeps SNR {rho[w]['tdi1']:.2f} of {rho_fd:.2f} in TDI-1)")
+        print(f"  {'piece':15s}{'window SNR':>11s}{'corr':>8s}{'std diff':>10s}"
+              f"{'pixel corr':>12s}{'W_GB':>8s}")
+        for i, name in enumerate(names):
+            print(f"  {name:15s}{rho[w][name]:11.2f}{corr[w, i]:8.3f}{spread[w, i]:10.3f}"
+                  f"{pix[w, i].mean():12.3f}{pix_gb[i].mean():8.3f}")
     wcorr = np.array([np.corrcoef(w[:, 0], w[:, 1])[0, 1] for w in wproj])
     wspread = np.array([np.std(w[:, 1] - w[:, 0]) for w in wproj])
     print(f"\nthe same, full transfer function, glitch window lengthened in time")
-    print(f"  {'window':26s}{'SNR kept TDI-1':>15s}{'TDI-2':>7s}{'corr':>8s}{'std diff':>10s}")
+    print(f"  {'window':32s}{'SNR kept TDI-1':>15s}{'TDI-2':>7s}{'corr':>8s}{'std diff':>10s}")
     for j, (label, _, _) in enumerate(MECH_WINDOWS):
-        print(f"  {label:26s}{wrho[j, 0] / rho_fd:15.3f}{wrho[j, 1] / rho_fd:7.3f}"
+        print(f"  {label:32s}{wrho[j, 0] / rho_fd:15.3f}{wrho[j, 1] / rho_fd:7.3f}"
               f"{wcorr[j]:8.3f}{wspread[j]:10.3f}")
-    return dict(pieces=np.array(names), rho_fd=rho_fd, rho_tdi1=rho["tdi1"],
-                rho_pieces=np.array([rho[k] for k in names]),
-                proj_tdi1=proj1, proj=proj, pixel_corr=pix, corr=corr, spread=spread,
+    return dict(pieces=np.array(names),
+                piece_windows=np.array([w[0] for w in PIECE_WINDOWS]), rho_fd=rho_fd,
+                rho_tdi1=np.array([r["tdi1"] for r in rho]),
+                rho_pieces=np.array([[r[k] for k in names] for r in rho]),
+                proj_tdi1=proj1, proj=proj, pixel_corr=pix, pixel_corr_gb=pix_gb,
+                corr=corr, spread=spread,
                 windows=np.array([w[0] for w in MECH_WINDOWS]), window_rho=wrho,
                 window_proj=wproj, window_corr=wcorr, window_spread=wspread)
 
@@ -468,8 +496,7 @@ def report():
 
     Nothing is computed that the stored chains and Laplace comparisons do not already
     contain; this only gathers the statistics Sec. "TDI-1 against TDI-2, in the
-    time--frequency domain" and the red To-do quote, so that each has a place it comes
-    from.
+    time--frequency domain" quotes, so that each has a place it comes from.
     """
     W = np.load(HERE / "wdm_chain.npz")
     T = np.load(HERE / "wdm_tdi2.npz")
@@ -511,13 +538,15 @@ def report():
         print(f"\n({path.name} not found: run `{Path(__file__).name} mechanism` for the rest)")
         return
     M = np.load(path)
-    print(f"\nmechanism ({M['proj'].shape[1]} draws): TDI-1 against each piece, noise "
-          f"projection onto the glitch template in W_gl")
-    for i, name in enumerate(M["pieces"]):
-        print(f"  {str(name):15s} corr {M['corr'][i]:.3f}   pixel corr W_gl "
-              f"{M['pixel_corr'][i, :, 0].mean():.3f}, W_GB {M['pixel_corr'][i, :, 1].mean():.3f}")
+    for w, wlabel in enumerate(M["piece_windows"]):
+        print(f"\nmechanism ({M['proj'].shape[-1]} draws), {wlabel}: TDI-1 against each "
+              f"piece, noise projection onto the glitch template")
+        for i, name in enumerate(M["pieces"]):
+            print(f"  {str(name):15s} corr {M['corr'][w, i]:.3f}   pixel corr "
+                  f"{M['pixel_corr'][w, i].mean():.3f}, W_GB {M['pixel_corr_gb'][i].mean():.3f}")
+    print()
     for j, label in enumerate(M["windows"]):
-        print(f"  {str(label):26s} SNR kept {M['window_rho'][j, 0] / M['rho_fd']:.3f}   "
+        print(f"  {str(label):32s} SNR kept {M['window_rho'][j, 0] / M['rho_fd']:.3f}   "
               f"corr {M['window_corr'][j]:.3f}")
 
 

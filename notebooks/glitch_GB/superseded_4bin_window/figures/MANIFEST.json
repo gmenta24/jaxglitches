@@ -1,0 +1,858 @@
+{
+  "fig_benchmark": {
+    "bytes": 30744,
+    "note": "wall-clock timings; values move with the machine",
+    "output": "paper/figures/fig_benchmark.pdf",
+    "produced_by": "paper/validation/03_benchmarks.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": false,
+    "sha256": "b96be1f23c9134182e09825355c008441ba296e6499b515c481ec1860c28c685"
+  },
+  "fig_corner": {
+    "bytes": 116687,
+    "inputs": {
+      "notebooks/glitch_GB/fd_chains.npz": "6fa594c0f0e014d8430e2b664e40f702f8f4dbc2bd647650d20b406475249dd6"
+    },
+    "output": "paper/figures/fig_corner.pdf",
+    "produced_by": "notebooks/glitch_GB/make_fig_fd.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "ed73d5943919752d65c2271fa83110003d79daa188efe69347fe48ca89537399"
+  },
+  "fig_decimation": {
+    "bytes": 55467,
+    "inputs": {
+      "notebooks/pp/decimation_summary.npz": "92fc544dfec02c3f1d2db5e086dfd64dd08b14cef237c345b5a1abf53c90c48a"
+    },
+    "note": "strides K = [8, 16, 54]",
+    "output": "paper/figures/fig_decimation.pdf",
+    "produced_by": "notebooks/pp/run_decimation.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "seed": {
+      "noise": "500000 + idx",
+      "truth": "10000 + idx"
+    },
+    "sha256": "dbacd2fac2b4121fa5460456efad969758097f2b382f681027f25d86db5eb1f8"
+  },
+  "fig_duration_snr": {
+    "bytes": 24086,
+    "inputs": {
+      "notebooks/glitch_only/glitch_comparison.npz": "8921ca86c8357c9e6b674f578ac20e897250140eb72e4248da5cf45185a41d5f"
+    },
+    "output": "paper/figures/fig_duration_snr.pdf",
+    "produced_by": "notebooks/glitch_only/glitch_comparison_inference.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "876128a142954e61d49a25ed7be03a6f024eaf871cd8b18cf6810678994dd198"
+  },
+  "fig_e2e_dt": {
+    "bytes": 21468,
+    "output": "paper/figures/fig_e2e_dt.pdf",
+    "produced_by": "paper/validation/04_end_to_end.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "8d7faa4973629bcbed53b2b68efe7ac51d86ee5ac773603714f0cea67f750670"
+  },
+  "fig_e2e_fd": {
+    "bytes": 30322,
+    "output": "paper/figures/fig_e2e_fd.pdf",
+    "produced_by": "paper/validation/04_end_to_end.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "8301255cd779864722981f553a67b816a1ac22471afbf334e29610dc7192820e"
+  },
+  "fig_e2e_time": {
+    "bytes": 26193,
+    "note": "physical armlength, anti-aliasing filter off, dt = 0.25 s",
+    "output": "paper/figures/fig_e2e_time.pdf",
+    "produced_by": "paper/validation/04_end_to_end.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "a3c3c33c00f2886812e0b97a090c2f227b91ccefe8095d1241c8b571b49024dc"
+  },
+  "fig_exact_vs_hybrid": {
+    "bytes": 29578,
+    "inputs": {
+      "notebooks/glitch_GB/dataset.npz": "b2f2497614ad3555a8ada6d0ecc91bec74f61128a24713cef4d17c094f044094"
+    },
+    "note": "samples the hybrid and the exact fine-grid likelihood on the same stored data stream, with the same sampler and starting procedure; the grey band is hybrid chains differing only in seed, in both TDI generations. Pinned to the CPU so the chains, and hence the figure, are reproducible",
+    "output": "paper/figures/fig_exact_vs_hybrid.pdf",
+    "produced_by": "notebooks/glitch_only/exact_vs_hybrid.ipynb",
+    "provenance": {
+      "git_commit": "08b81265e1e7d754f18b4dc7b17cdbb27577a52c",
+      "git_dirty": true,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "seed": {
+      "full1": 1,
+      "full2": 1,
+      "hyb1_a": 1,
+      "hyb1_b": 2,
+      "hyb2_a": 1,
+      "hyb2_b": 2
+    },
+    "sha256": "0d9007ff9b59733bc9f58587ad02f71b6cd7368e98244f61a1b1db793d34b84c"
+  },
+  "fig_gradients": {
+    "bytes": 43945,
+    "note": "panel (d) depends on how the JAX version differentiates abs(); the panel states which outcome this run produced",
+    "output": "paper/figures/fig_gradients.pdf",
+    "produced_by": "paper/validation/02_gradients.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "seed": {
+      "noise": 0,
+      "prior_draws": 1
+    },
+    "sha256": "afafb18bd0e4e62183dc260eca725edfda857c9dae993733cdcef9dd89aa956d"
+  },
+  "fig_heterodyne": {
+    "bytes": 33813,
+    "inputs": {
+      "notebooks/glitch_GB/dataset.npz": "b2f2497614ad3555a8ada6d0ecc91bec74f61128a24713cef4d17c094f044094"
+    },
+    "output": "paper/figures/fig_heterodyne.pdf",
+    "produced_by": "paper/validation/05_heterodyne.ipynb",
+    "provenance": {
+      "git_commit": "dfd3264f149ddf8d642ce98bf6bbaea323fec54f",
+      "git_dirty": false,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "135c8cdf973cf6f257abe4db5a39edd5eabdda4a40911a9b2274831d33f76d28"
+  },
+  "fig_knee_scan": {
+    "bytes": 31675,
+    "inputs": {
+      "notebooks/glitch_GB/knee_mcmc.npz": "7d20c5a0d8dda65899fd22f615db675abb7a9f41a4f13491c3e78ec9b4808356",
+      "notebooks/glitch_GB/knee_scan.npz": "744c7212ce6a71e719e849dfd396ec55beedb9c085435a2188d1dddef35ad312"
+    },
+    "output": "paper/figures/fig_knee_scan.pdf",
+    "produced_by": "notebooks/glitch_GB/run_knee_scan.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "68681ec3d814751dd5a940f2b1083c57b9a6aa0dfd3af798a38d1b684023f738"
+  },
+  "fig_literature": {
+    "bytes": 42457,
+    "note": "published values are hard-coded from the references; the only input is the LPF catalogue shipped inside the package",
+    "output": "paper/figures/fig_literature.pdf",
+    "produced_by": "notebooks/glitch_only/compare_other_codes.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "27d2973469411850e30757cc91511f2566643c5d924a283fb98a7e4bb7ce2d6c"
+  },
+  "fig_pp": {
+    "bytes": 35410,
+    "inputs": {
+      "notebooks/pp/pp_summary.npz": "d7dfd4dac76246a1f9100c44f55d73314668e206112200b1c50cfad86fccd290"
+    },
+    "note": "100 realisations",
+    "output": "paper/figures/fig_pp.pdf",
+    "produced_by": "notebooks/pp/run_ppplot.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "seed": {
+      "noise": "500000 + idx",
+      "truth": "10000 + idx"
+    },
+    "sha256": "e6f01ecb7399ade5c70923641349a5e5b8e1ea63ed54ace76b82a8c96d930124"
+  },
+  "fig_priors": {
+    "bytes": 27032,
+    "inputs": {
+      "src/jaxglitches/lpf_data/2021-09-17-effective_glitch_parameters_ordinary.txt": "7ceaf2270e2ad1bfcc37bdbdc143aed209a8595781cbd34b4fd84dd577aa0ef8"
+    },
+    "output": "paper/figures/fig_priors.pdf",
+    "produced_by": "paper/validation/make_fig_priors.py",
+    "provenance": {
+      "git_commit": "08b81265e1e7d754f18b4dc7b17cdbb27577a52c",
+      "git_dirty": false,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "11ca00c2121f46bc1c67bdfbe940bf4559a4efc5e6ad8c7db6f0a54e078a9dae"
+  },
+  "fig_residual": {
+    "bytes": 67869,
+    "inputs": {
+      "notebooks/glitch_GB/dataset.npz": "b2f2497614ad3555a8ada6d0ecc91bec74f61128a24713cef4d17c094f044094",
+      "notebooks/glitch_GB/fd_chains.npz": "6fa594c0f0e014d8430e2b664e40f702f8f4dbc2bd647650d20b406475249dd6"
+    },
+    "output": "paper/figures/fig_residual.pdf",
+    "produced_by": "notebooks/glitch_GB/make_fig_fd.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "cec643e2c0f62ecc0b3439393232f398c45ec1fab6b83fdedf9fc87cf986980d"
+  },
+  "fig_unequal": {
+    "bytes": 35265,
+    "output": "paper/figures/fig_unequal.pdf",
+    "produced_by": "notebooks/glitch_only/unequal_vs_equal_arm.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "eeea3369d842f61d3e8066695e939a272d6a6a8c5f6a4d1dec83360e7d6d1e2e"
+  },
+  "fig_unmodelled": {
+    "bytes": 43998,
+    "inputs": {
+      "notebooks/glitch_GB/unmodelled.npz": "53fdcc54bf825a357ba0803039f7f930112ba013c780e28633b1117a3e7f59cf"
+    },
+    "output": "paper/figures/fig_unmodelled.pdf",
+    "produced_by": "notebooks/glitch_GB/make_fig_unmodelled.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "97aa19fbf8e75612ab880373d6b3334b923113514299fe2ef87b4fee160b3445"
+  },
+  "fig_val_arms": {
+    "bytes": 59694,
+    "output": "paper/figures/fig_val_arms.pdf",
+    "produced_by": "paper/validation/01_waveform_accuracy.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "3502b0fadae5f81805f7628048705fb808fe47ae231401eb080d614c70b257af"
+  },
+  "fig_val_lisaglitch": {
+    "bytes": 21166,
+    "output": "paper/figures/fig_val_lisaglitch.pdf",
+    "produced_by": "paper/validation/01_waveform_accuracy.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "b766f608bd01eb90fb0d05b478e3d17c5521f6234315e48c019698867971d5a9"
+  },
+  "fig_val_tdfd": {
+    "bytes": 37682,
+    "output": "paper/figures/fig_val_tdfd.pdf",
+    "produced_by": "paper/validation/01_waveform_accuracy.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "6d9e17eac7386901489652ec3d497cb993403249a65ade15957c3eb5fddf551b"
+  },
+  "fig_val_tdi": {
+    "bytes": 52119,
+    "output": "paper/figures/fig_val_tdi.pdf",
+    "produced_by": "paper/validation/01_waveform_accuracy.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "6401ef1949656543afcbd53702bb95a688b2d3b04563c43fc2ee56f294695818"
+  },
+  "fig_wdm_corner": {
+    "bytes": 950408,
+    "inputs": {
+      "notebooks/glitch_GB/wdm_chain.npz": "5562d8dd5c0483fe918fa12c004dbf47372d2e6c535b64cf0dcf8c3284e45168"
+    },
+    "output": "paper/figures/fig_wdm_corner.pdf",
+    "produced_by": "notebooks/glitch_GB/make_corner_wdm_vs_fd.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "6ebe4a8143e7756f2079cd783a322fd8e61d2f40faf70accd80fd0aa7ca86bcb"
+  },
+  "fig_wdm_tdi": {
+    "bytes": 32960,
+    "inputs": {
+      "notebooks/glitch_GB/convergence.npz": "be43d7c8d6c2cb60429f568fcfc010fff30abb9a0cf14611562cdcb287923257",
+      "notebooks/glitch_GB/wdm_chain.npz": "5562d8dd5c0483fe918fa12c004dbf47372d2e6c535b64cf0dcf8c3284e45168",
+      "notebooks/glitch_GB/wdm_tdi2.npz": "261640130721eda7d02a285d399731a65c921b030e0341f159dd812c0bf91f8c"
+    },
+    "output": "paper/figures/fig_wdm_tdi.pdf",
+    "produced_by": "notebooks/glitch_GB/make_fig_wdm_tdi.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "5d6bb63cd011c9d82d366ade99655c7a38e270a52c0fd8f27c828de612a541c0"
+  },
+  "fig_wdm_tiling": {
+    "adopted": true,
+    "bytes": 32476,
+    "inputs": {
+      "notebooks/glitch_GB/dataset.npz": "b2f2497614ad3555a8ada6d0ecc91bec74f61128a24713cef4d17c094f044094"
+    },
+    "note": "recorded from disk, not from a run: predates the manifest; writes wdm_chain.npz; fig_wdm_corner is then redrawn by the wdm_corner step, which is what the paper ships",
+    "output": "paper/figures/fig_wdm_tiling.pdf",
+    "produced_by": "notebooks/glitch_GB/glitch_and_gb_wdm.ipynb",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "101a2ef30fe10494f9026db33a47d2b20932b66f6976d7b3f0219bf5ce469b59"
+  },
+  "tab_benchmark": {
+    "bytes": 684,
+    "note": "wall-clock timings; values move with the machine",
+    "output": "paper/figures/tab_benchmark.tex",
+    "produced_by": "paper/validation/03_benchmarks.ipynb",
+    "provenance": {
+      "git_commit": "bc03052b89f97b9765145d8d73f8f9c60c5f0f11",
+      "git_dirty": true,
+      "jax_backend": "gpu",
+      "jax_devices": [
+        "cuda:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": false,
+    "sha256": "35a0ad263b2a13252168eb90f769637d76db5016dc1d44adfa76c0fb9bf4a606"
+  },
+  "tab_convergence": {
+    "bytes": 1274,
+    "inputs": {
+      "notebooks/glitch_GB/fd_chains.npz": "6fa594c0f0e014d8430e2b664e40f702f8f4dbc2bd647650d20b406475249dd6",
+      "notebooks/glitch_GB/gb_free_sky.npz": "dcd5856cfe1ba64e2d40d939a88f4316b2025c4016ad36ce8beaef8ab92e08d5",
+      "notebooks/glitch_GB/unmodelled.npz": "53fdcc54bf825a357ba0803039f7f930112ba013c780e28633b1117a3e7f59cf",
+      "notebooks/glitch_GB/wdm_chain.npz": "5562d8dd5c0483fe918fa12c004dbf47372d2e6c535b64cf0dcf8c3284e45168",
+      "notebooks/glitch_GB/wdm_tdi2.npz": "261640130721eda7d02a285d399731a65c921b030e0341f159dd812c0bf91f8c"
+    },
+    "output": "paper/figures/tab_convergence.tex",
+    "produced_by": "notebooks/glitch_GB/run_convergence.py",
+    "provenance": {
+      "git_commit": "13224c75090a17d2ca15141a5b8adc63170a476a",
+      "git_dirty": true,
+      "jax_backend": "cpu",
+      "jax_devices": [
+        "cpu:0"
+      ],
+      "jax_enable_x64": true,
+      "packages": {
+        "jax": "0.10.1",
+        "jaxgb": "0.2.2",
+        "jaxglitches": "0.1.0",
+        "jaxlib": "0.10.1",
+        "jexplore": "0.0.2",
+        "lisaglitch": "2.0.0",
+        "lisainstrument": "2.3.0",
+        "lisaorbits": "3.1.0",
+        "matplotlib": "3.10.9",
+        "numpy": "2.4.6",
+        "pytdi": "2.2.1",
+        "scipy": "1.17.1"
+      },
+      "python": "3.12.3"
+    },
+    "reproducible": true,
+    "sha256": "c68667d407ebf3b411c20548e3a8f0bc1ba62e9e6ed9f7e684e073465d73055a"
+  }
+}

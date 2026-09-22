@@ -62,9 +62,12 @@ ax.plot(x, T["laplace_shift"], "o", ms=4.5, color=C["blue"],
         label="the realisation analysed")
 ax.axhline(0.0, color=C["grey"], lw=0.7, ls=":")
 ax.axvline(N_GB_PAR - 0.5, color=C["grey"], lw=0.7, ls=":")
-ax.text(1.5, 1.45, "binary block", fontsize=6, color=C["grey"], ha="center")
-ax.text(5.0, 1.45, "glitch block", fontsize=6, color=C["grey"], ha="center")
-ax.set_ylim(-1.75, 1.75)
+# The vertical range follows the scatter rather than a fixed number, so that the panel
+# stays readable whatever window the comparison is run with.
+lim = 1.25 * max(np.abs(scatter).max(), np.abs(T["laplace_shift"]).max())
+ax.text(1.5, 0.85 * lim, "binary block", fontsize=6, color=C["grey"], ha="center")
+ax.text(5.0, 0.85 * lim, "glitch block", fontsize=6, color=C["grey"], ha="center")
+ax.set_ylim(-lim, lim)
 ax.set_xticks(x)
 ax.set_xticklabels(DISPLAY)
 ax.set_ylabel(r"$(\theta^{(2)}-\theta^{(1)})\,/\,\sigma$")
