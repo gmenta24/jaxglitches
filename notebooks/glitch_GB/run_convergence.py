@@ -18,7 +18,9 @@ sharp as the sampler allows.
 
 Reads the stored chains -- `fd_chains.npz`, `wdm_chain.npz`, `wdm_tdi2.npz`,
 `gb_free_sky.npz` -- so nothing is re-sampled. Writes `convergence.npz` next to this
-script and `paper/figures/tab_convergence.tex`. Runtime about 20 s, almost all of it the
+script, `paper/figures/tab_convergence.tex` and `paper/figures/tab_posterior.tex`
+(the paper's posterior summary, built from `fd_chains.npz` so that it cannot drift from
+the chains Fig. `corner` is drawn from). Runtime about 20 s, almost all of it the
 Newton check, which has to build the likelihoods; it runs on the CPU deliberately, see
 below.
 """
@@ -238,14 +240,21 @@ def newton_check():
                    one_vs_conv=np.asarray(np.abs(one - conv)) / sig_ch,
                    conv_vs_median=(np.asarray(conv) - medians[name]) / sig_ch,
                    sigma_ratio=np.asarray(sig) / sig_ch)
-        out[name.replace(" ", "_").replace(",", "")] = row["logpost"]
-        out[name.replace(" ", "_").replace(",", "") + "_one_vs_conv"] = row["one_vs_conv"]
+        key = name.replace(" ", "_").replace(",", "")
+        out[key] = row["logpost"]
+        out[key + "_one_vs_conv"] = row["one_vs_conv"]
+        # Sec. "Is the Fisher forecast trustworthy?" quotes this against the Fisher at
+        # the injected truth: same chain in the denominator, different expansion point.
+        out[key + "_sigma_ratio_at_max"] = row["sigma_ratio"]
         print(f"{name:26s}{used:6d}{'':16s}{row['logpost'][0]:13.4f}"
               f"{row['logpost'][1]:13.4f}{row['logpost'][2]:13.4f}")
         print(f"{'':26s}max |one step - converged| / sigma = "
               f"{row['one_vs_conv'].max():.2f};  "
               f"max |converged - chain median| / sigma = "
               f"{np.abs(row['conv_vs_median']).max():.2f}")
+        print(f"{'':26s}Laplace width at the maximum / chain width: "
+              + "  ".join(f"{l}={r:.2f}" for l, r in
+                          zip([str(x) for x in fd["labels"]], row["sigma_ratio"])))
     print("\nThe first step is undamped and overshoots: it lands below the value it "
           "started from.\nBacktracking and iterating reaches the maximum, which agrees "
           "with the chain median.")
@@ -278,6 +287,100 @@ def latex_table(rows, inputs=()):
                  + f" & ${d['rhat'].max():.4f}$ \\\\\n")
     tail = r"\hline\hline" "\n" r"\end{tabular}" "\n"
     return save_text(head + body + tail, "tab_convergence.tex", inputs=inputs)
+
+
+def _sci(x, sig=2):
+    """`1.2\\times10^{-17}`, or a plain decimal where that reads better.
+
+    A mantissa that rounds to 1 or to a whole number loses its decimal point, so an
+    injected value comes out as `2\\times10^{-3}` and `10^{-21}` rather than
+    `2.0\\times10^{-3}` and `1.0\\times10^{-21}`.
+    """
+    if x == 0:
+        return "0"
+    e = int(np.floor(np.log10(abs(x))))
+    if -2 <= e <= 2:
+        return f"{x:.{max(0, sig - 1 - e)}f}"
+    m = f"{x / 10.0 ** e:.{sig - 1}f}".rstrip("0").rstrip(".")
+    return f"10^{{{e}}}" if m == "1" else f"{m}\\times10^{{{e}}}"
+
+
+def posterior_table(inputs=()):
+    """The paper's Table `tab:posterior`, built from the stored chains.
+
+    Every entry comes from `fd_chains.npz`: the sampled widths of the TDI-1 chain,
+    converted from the sampling (log) coordinates to physical units; the displacement
+    of each generation's median from the injected value, in units of that chain's own
+    width; and the Fisher forecast at the injected truth, `C_fisher`, divided by the
+    sampled width. The hand-built version of this table came from a different execution
+    of the same chain and quoted a Laplace width in the column headed sigma(MCMC) for
+    log f0, because the notebook printed that one as 0.0000; both are fixed by reading
+    the file the rest of the paper reads.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(REPO / "paper" / "validation"))
+    from _style import save_text
+
+    fd = np.load(HERE / "fd_chains.npz")
+    labels = [str(x) for x in fd["labels"]]
+    th = np.asarray(fd["theta_true"])
+    c1, c2 = fd["chain1"], fd["chain2"]
+    s1, s2 = c1.std(axis=0), c2.std(axis=0)
+    z1 = (np.median(c1, axis=0) - th) / s1
+    z2 = (np.median(c2, axis=0) - th) / s2
+    ratio = np.sqrt(np.diag(fd["C_fisher"])) / s1
+
+    # (label, injected value, scale from sampled width to physical, fractional?)
+    # a log coordinate has sigma_phys = sigma_log * value and fractional precision
+    # sigma_log; a linear one carries its own units and no fractional precision.
+    phys = {"log_f0": np.exp(th[0]), "log_fdot": np.exp(th[1]),
+            "log_A_gb": np.exp(th[2]), "psi": th[3], "t0": th[4],
+            "log_Ag": np.exp(th[5]), "log_tau": np.exp(th[6])}
+    rows = [("$f_{0}$ [Hz]", "log_f0", True),
+            ("$\\dot f$ [Hz\\,s$^{-1}$]", "log_fdot", True),
+            ("$\\mathcal{A}_{\\rm GB}$", "log_A_gb", True),
+            ("$\\psi$ [rad]", "psi", False),
+            (None, None, None),
+            ("$t_{0}$ [s]", "t0", False),
+            ("$A_{g}=\\Delta v\\,\\tau$ [m]", "log_Ag", True),
+            ("$\\tau$ [s]", "log_tau", True)]
+
+    head = (r"\begin{tabular}{llrrrrr}" "\n" r"\hline\hline" "\n"
+            r"Parameter & Injected & $\sigma$ (MCMC) & fractional &"
+            "\n"
+            r"  $(\hat\theta-\theta)/\sigma$ & $(\hat\theta-\theta)/\sigma$ &"
+            "\n"
+            r"  $\sigma_{\rm Fisher}/\sigma_{\rm MCMC}$ \\" "\n"
+            r"& & & precision & TDI-1 & TDI-2 & \\" "\n" r"\hline" "\n")
+    body = ""
+    for label, key, is_log in rows:
+        if label is None:
+            body += "\\hline\n"
+            continue
+        i = labels.index(key)
+        v = phys[key]
+        sig = s1[i] * v if is_log else s1[i]
+        # three significant figures where the width is a plain number of seconds,
+        # two where it carries an exponent, as the hand-built table did
+        nsig = 3 if 1e-2 <= abs(sig) < 1e3 else 2
+        frac = (f"${s1[i] * 100:.2g}\\%$" if is_log and s1[i] > 1e-3
+                else f"${_sci(s1[i])}$" if is_log else "---")
+        inj = "$\\pi/4$" if key == "psi" else f"${_sci(v, 2)}$"
+        body += (f"{label} & {inj} & ${_sci(sig, nsig)}$ & {frac}"
+                 f" & ${z1[i]:+.2f}$ & ${z2[i]:+.2f}$ & ${ratio[i]:.2f}$ \\\\\n")
+    tail = r"\hline\hline" "\n" r"\end{tabular}" "\n"
+
+    print("\n=== Table tab:posterior, from fd_chains.npz ===")
+    for label, key, is_log in rows:
+        if label is None:
+            continue
+        i = labels.index(key)
+        print(f"  {key:9s} sigma {s1[i]:12.5g}  z1 {z1[i]:+6.3f}  z2 {z2[i]:+6.3f}"
+              f"  Fisher/MCMC {ratio[i]:6.3f}")
+    print(f"  |z| range TDI-1: {np.abs(z1).min():.2f}-{np.abs(z1).max():.2f};  "
+          f"largest |z1 - z2| = {np.abs(z1 - z2).max():.3f} "
+          f"({labels[int(np.argmax(np.abs(z1 - z2)))]})")
+    return save_text(head + body + tail, "tab_posterior.tex", inputs=inputs)
 
 
 def main():
@@ -345,6 +448,7 @@ def main():
     latex_table(rows, inputs=[HERE / n for n in
                              ("fd_chains.npz", "wdm_chain.npz", "wdm_tdi2.npz",
                               "gb_free_sky.npz", "unmodelled.npz")])
+    posterior_table(inputs=[HERE / "fd_chains.npz"])
     print(f"saved {HERE / 'convergence.npz'}")
 
 

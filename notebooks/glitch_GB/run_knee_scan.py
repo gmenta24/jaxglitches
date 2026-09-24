@@ -28,14 +28,18 @@ What is measured
    Galactic binary, of the rho ~ 70 threshold that Muratore et al. (2025) find for
    massive black hole binaries.
 
-   The bias depends on the glitch's arrival time as well as on its spectrum, and
-   sharply: across the 8 uHz the binary occupies, moving t0 rotates h_gl by a phase
-   that is constant to a few per cent, so the projection onto each binary derivative
-   is u_j cos(phi) - v_j sin(phi) with phi = -2 pi f0 t0. Quoting the bias at one
-   arrival time would make rho_crit oscillate by a factor of a few between adjacent
-   grid points for no physical reason. `beta` is therefore the maximum over phi --
-   the worst arrival time, which is what Muratore et al. scan for explicitly -- and
-   `beta_fid` is the value at the fiducial t0 = 400 s, for scale.
+   The bias depends on the glitch's arrival time as well as on its spectrum, and on
+   two scales at once. Within one cycle of 1/f0 the glitch's phase across the binary's
+   8 uHz window is constant to a few per cent, so the projection onto each binary
+   derivative is u_j cos(phi) - v_j sin(phi) with phi = -2 pi f0 t0; quoting the bias
+   at one phase would make rho_crit oscillate by a factor of a few between adjacent
+   grid points for no physical reason, so `beta` is the maximum over phi -- what
+   Muratore et al. scan for explicitly -- and `beta_fid` is the value at the fiducial
+   phase, for scale. Over the record as a whole the phase is not constant across the
+   window at all: the ramp is 2 pi (256 df) t0, which is 0.02 rad at t0 = 400 s and
+   hundreds of radians months in, so a late glitch decorrelates from the binary's
+   derivatives and the bias falls by a factor of a few. `scan()` holds the epoch at
+   t0 = 400 s, the worst case; `t0scan()` walks it.
 4. `eps` -- the fraction of the glitch's rho^2 that falls inside the 256-bin window
    the binary occupies. This is the number the WDM split of Eq. (wdmsplit) throws
    away when it notches the binary's channel out of the glitch window, so it governs
@@ -62,6 +66,7 @@ fdot ~ f0^(11/3), anchored on the fiducial (2 mHz, 5e-17 Hz/s).
 Usage
 -----
     python run_knee_scan.py                  # the Fisher scan -> knee_scan.npz
+    python run_knee_scan.py --t0scan         # the arrival-epoch axis -> knee_t0.npz
     python run_knee_scan.py --mcmc           # confirm 3 points with real chains
     python run_knee_scan.py --figure         # -> paper/figures/fig_knee_scan.pdf
 """
@@ -110,6 +115,14 @@ N_F0 = 16
 F0_MIN, F0_MAX = 5.0e-5, 2.6e-3
 
 GB_NAMES = ("log_f0", "log_fdot", "log_A_gb", "psi")
+
+# Arrival epochs, in days from the start of the record, at which `t0scan` re-evaluates
+# the bias. Dense at both ends, where the binary's lever arm in time is longest and
+# rho_crit moves fastest, and sparse through the middle where it is flat. The last one
+# is a day before the record ends, so that even a tau = 3000 s glitch is inside it.
+T0_DAYS = (400.0 / 86400.0, 1.0, 2.0, 5.0, 10.0, 20.0, 40.0, 80.0, 120.0, 180.74,
+           240.0, 280.0, 320.0, 340.0, 350.0, 355.0, 356.5, 359.0, 360.5)
+OUT_T0 = os.path.join(HERE, "knee_t0.npz")
 
 # Half-widths of the flat analysis prior on the four binary parameters, matching the
 # P--P study of the paper. They enter rho_crit and nothing else: without them the map
@@ -162,14 +175,54 @@ def _exact_loglik(grid, data, psd, model, n_gb, co, with_glitch=True):
     return jax.jit(ll)
 
 
+_GRAD_GB_CACHE = {}
+
+
+def _grad_gb_fn(grid, psd, model, n_gb, co):
+    """d/dtheta of the glitch-free log-likelihood, with the data as an argument.
+
+    `_exact_loglik` closes over its data and is jitted, so a fresh kernel is traced and
+    compiled for every array passed to it -- fine for the two evaluations a single
+    `point()` needs, ruinous for an epoch scan, where the data change at every step.
+    Hoisting the data into the signature compiles once per grid and reuses the kernel
+    for every epoch, every f0 and every tau.
+    """
+    # keyed on the objects the kernel closes over, but on `co`'s *settings* rather than
+    # its identity: a Coords is rebuilt per call, and recycled ids would otherwise hand
+    # back a kernel built for a different coordinate map.
+    key = (id(grid), id(psd), id(model), n_gb,
+           co.free_sky, co.ra0, co.dec0, co.iota0, co.phi00)
+    if key not in _GRAD_GB_CACHE:
+        co_k = co
+
+        def ll(th, data):
+            gb8, _ = co_k.to_physical(th)
+            h = fp.gb_fd_full(model, n_gb, gb8, grid["n_fine"])
+            r = (data - h)[1:]
+            return -jnp.sum((r.real ** 2 + r.imag ** 2) / psd[1:])
+        _GRAD_GB_CACHE[key] = jax.jit(jax.grad(ll))
+    return _GRAD_GB_CACHE[key]
+
+
 def point(f0, tau, grid, model, n_gb, psd, deltav=DELTAV_FID, a_gb=A_GB_FID,
-          t0=T0_FID):
+          t0=T0_FID, t0s=None):
     """Fisher-level diagnostics for one (f0, tau).
 
     `deltav` and `a_gb` set the SNRs that are reported; `deg`, `xcorr` and `beta` are
     independent of both (see the module docstring), which the `--check` mode verifies.
-    `t0` sets the arrival time at which `bias_fid` is evaluated; `bias` is maximised
-    over arrival phase and does not depend on it.
+
+    `t0` is the arrival *epoch*. `bias` is maximised over the arrival *phase* within
+    one cycle of 1/f0 around it, and `bias_fid` is the value at the epoch itself. The
+    two are not the same axis: across the binary's window the glitch's phase ramp is
+    2 pi (256 df) t0, which is 0.02 rad for a glitch at the start of the record and
+    hundreds of radians for one arriving months in, so a late glitch decorrelates from
+    the binary's derivatives and `bias` falls. `t0s` evaluates that epoch dependence:
+    given a sequence of epochs it returns `beta_t0`, the phase-maximised bias per unit
+    glitch SNR at each of them, so that rho_crit(t0) = 1 / beta_t0.
+
+    The epoch axis is nearly free. The binary block A of the Fisher matrix involves
+    only the binary's own derivatives, so it does not depend on t0 at all (asserted
+    below), and each extra epoch costs two gradients rather than a Hessian.
     """
     co = fp.Coords(free_sky=False)
     gb8 = jnp.array([f0, fdot_of(f0), a_gb, RA, DEC, PSI, IOTA, PHI0])
@@ -221,18 +274,33 @@ def point(f0, tau, grid, model, n_gb, psd, deltav=DELTAV_FID, a_gb=A_GB_FID,
     # The two quadratures of the arrival phase: grad(log L) is linear in the unmodelled
     # residual, so injecting h_gl and i*h_gl returns the real and imaginary parts of
     # (d_j h_GB | h_gl) from one pair of gradient evaluations.
-    grad_gb = lambda d: np.asarray(jax.grad(
-        _exact_loglik(grid, d, psd, model, n_gb, co, with_glitch=False))(th))[:4]
+    _g = _grad_gb_fn(grid, psd, model, n_gb, co)
+    grad_gb = lambda d: np.asarray(_g(th, d))[:4]
     u = grad_gb(h_gb + h_gl)
     v = -grad_gb(h_gb + 1j * h_gl)
     au, av = np.linalg.solve(Ap, u), np.linalg.solve(Ap, v)
     phi = np.linspace(0.0, 2 * np.pi, 721)
-    b_phi = (np.abs(np.cos(phi)[:, None] * au - np.sin(phi)[:, None] * av)
+
+    def _beta(uu, vv):
+        """Phase-maximised bias per unit glitch SNR, and the four displacements."""
+        a_u, a_v = np.linalg.solve(Ap, uu), np.linalg.solve(Ap, vv)
+        b = (np.abs(np.cos(phi)[:, None] * a_u - np.sin(phi)[:, None] * a_v)
              / sig_post)                                   # (n_phi, 4)
-    k = int(np.argmax(b_phi.max(axis=1)))
-    bias = b_phi[k]
+        kk = int(np.argmax(b.max(axis=1)))
+        return b[kk], kk
+
+    bias, k = _beta(u, v)
     beta = float(bias.max() / rho_gl)
     bias_fid = np.abs(au) / sig_post
+
+    beta_t0 = None
+    if t0s is not None:
+        beta_t0 = np.empty(len(t0s))
+        for m, te in enumerate(np.asarray(t0s, dtype=float)):
+            h_e = fp.glitch_fd(jnp.array([te, deltav, tau]),
+                               grid["freq"]).at[0].set(0 + 0j)
+            b_e, _ = _beta(grad_gb(h_gb + h_e), -grad_gb(h_gb + 1j * h_e))
+            beta_t0[m] = b_e.max() / rho_gl
 
     return dict(f0=f0, tau=tau, x=2 * np.pi * f0 * tau, rho_gb=rho_gb, rho_gl=rho_gl,
                 overlap=overlap, overlap_win=overlap_win, eps=eps, k0=k0,
@@ -242,7 +310,7 @@ def point(f0, tau, grid, model, n_gb, psd, deltav=DELTAV_FID, a_gb=A_GB_FID,
                 # evaluated at, and the bias is periodic in t0 with period 1/f0
                 t0_worst=float((t0 - phi[k] / (2 * np.pi * f0)) % (1.0 / f0)),
                 rho_crit=1.0 / beta, sig=sig, sig_only=sig_only,
-                sig_post=sig_post, prior_half=half,
+                sig_post=sig_post, prior_half=half, beta_t0=beta_t0,
                 cond=float(np.linalg.cond(F)))
 
 
@@ -310,6 +378,88 @@ def extend(f0s=(6.0e-5, 8.0e-5, 1.0e-4, 1.3e-4), taus=(300.0, 1000.0, 3000.0)):
           f"|O|_win = {r['overlap_win']:.3f}, xcorr = {r['xcorr']:.4f}")
     print(f"  max deg = {r['deg'].max():.6f}, rho_crit = {r['rho_crit']:.1f}, "
           f"bias at rho_gl = 42.7 is {r['beta']*RHO_GL_FID:.4f} sigma")
+
+
+def t0scan():
+    """rho_crit over the whole (tau, f0, arrival epoch) cube.
+
+    `scan()` holds the epoch at the injected t0 = 400 s, i.e. at the start of the
+    record. That is the worst place for it to be: f0 and fdot are read from the phase
+    at the two ends of the year, so a glitch arriving at either end has the most
+    leverage on them, while one arriving mid-year is largely decorrelated from the
+    binary's derivatives (see `point`). This walks the epoch explicitly, at every
+    (tau, f0) of the scan grid, and writes `knee_t0.npz` for `combine_knee_lpf.py`,
+    which needs rho_crit as a function of *when* a glitch arrives as well as of how
+    long it lasts.
+
+    The cost is one Hessian per (tau, f0), as in `scan()`, plus two gradients per
+    epoch: the binary Fisher block does not depend on the epoch, so the expensive part
+    is computed once and reused. About half an hour on a CPU.
+    """
+    DS = np.load(os.path.join(HERE, "dataset.npz"))
+    grid, model, n_gb, psd = _setup(DS["N"], DS["DT"], DS["N_GB"])
+    t_obs = grid["T_OBS"]
+    t0s = np.asarray(T0_DAYS) * 86400.0
+    assert t0s[-1] < t_obs, "the last epoch must be inside the record"
+    f0s = np.geomspace(F0_MIN, F0_MAX, N_F0)
+    rc = np.zeros((len(TAUS), N_F0, len(t0s)))
+
+    print(f"epoch scan: {len(TAUS)} tau x {N_F0} f0 x {len(t0s)} epochs "
+          f"(record {t_obs / 86400:.1f} d)")
+    for i, tau in enumerate(TAUS):
+        for j, f0 in enumerate(f0s):
+            r = point(float(f0), float(tau), grid, model, n_gb, psd, t0s=t0s)
+            rc[i, j] = 1.0 / r["beta_t0"]
+            # the first epoch is T0_FID to a part in 1e9, so the two agree
+            assert abs(rc[i, j, 0] / r["rho_crit"] - 1.0) < 1e-6, (i, j)
+        k = int(np.argmin(rc[i, :, 0]))
+        print(f"  tau {tau:7.0f} s: worst f0 at the start {f0s[k]*1e3:7.3f} mHz, "
+              f"rho_crit {rc[i, k, 0]:8.1f};  min over f0 mid-year "
+              f"{rc[i, :, 9].min():8.1f};  over the whole cube "
+              f"{rc[i].min():8.1f}", flush=True)
+
+    np.savez_compressed(OUT_T0, taus=np.asarray(TAUS), f0s=f0s, t0s=t0s,
+                        rho_crit_t0=rc, T_OBS=t_obs)
+    print(f"\nsaved {OUT_T0}")
+    return rc
+
+
+def t0report():
+    """What Sec. "How far does the separation extend?" quotes from `knee_t0.npz`.
+
+    Two conventions are printed per tau row, because they are not the same number: the
+    threshold at the f0 that is worst when the glitch arrives at the start of the record
+    (which is what Eq. (rhocritflat) reports, and what a fixed-f0 comparison across
+    epochs wants), and the minimum over f0 at each epoch separately (the worst binary
+    anywhere in the band at that epoch). The second is the one a population count uses.
+    """
+    d = np.load(OUT_T0)
+    taus, f0s, t0s, rc = d["taus"], d["f0s"], d["t0s"], d["rho_crit_t0"]
+    t_obs = float(d["T_OBS"])
+    mid = int(np.argmin(np.abs(t0s - 0.5 * t_obs)))
+    over_f0 = rc.min(axis=1)                       # (n_tau, n_t0), worst f0 per epoch
+    print(f"record {t_obs / 86400:.1f} d; mid-year column at t0 = {t0s[mid]/86400:.2f} d")
+    print(f"{'tau [s]':>9}{'f0 [mHz]':>10}{'t0=400 s':>10}{'worst ep.':>11}{' [d]':>7}"
+          f"{'mid-year':>10}{'  |':>3}{'min/f0 mid':>12}{'min/f0 all':>12}")
+    for i, tau in enumerate(taus):
+        j = int(np.argmin(rc[i, :, 0]))            # worst f0 at the record's start
+        k = int(np.argmin(rc[i, j]))               # worst epoch at that f0
+        print(f"{tau:9.0f}{f0s[j] * 1e3:10.2f}{rc[i, j, 0]:10.0f}{rc[i, j, k]:11.0f}"
+              f"{t0s[k] / 86400:7.1f}{rc[i, j, mid]:10.0f}{'  |':>3}"
+              f"{over_f0[i, mid]:12.0f}{over_f0[i].min():12.0f}")
+    edge = np.array([rc[i, int(np.argmin(rc[i, :, 0])), 0] for i in range(len(taus))])
+    i, j, k = np.unravel_index(int(np.argmin(rc)), rc.shape)
+    print(f"\nat the injected epoch, worst f0:  {edge.min():.0f}-{edge.max():.0f}")
+    print(f"mid-year, worst f0 there:         {over_f0[:, mid].min():.0f}-"
+          f"{over_f0[:, mid].max():.0f}")
+    print(f"worst epoch, worst f0:            {over_f0.min(axis=1).min():.0f}-"
+          f"{over_f0.min(axis=1).max():.0f}")
+    print(f"mid-year / worst epoch, per row:  "
+          f"{(over_f0[:, mid] / over_f0.min(axis=1)).min():.1f}-"
+          f"{(over_f0[:, mid] / over_f0.min(axis=1)).max():.1f}")
+    print(f"deepest point of the cube: rho_crit = {rc[i, j, k]:.0f} at tau = {taus[i]:g} s,"
+          f" f0 = {f0s[j]*1e3:.3f} mHz, t0 = {t0s[k]/86400:.1f} d "
+          f"({(t_obs - t0s[k])/86400:.1f} d before the end)")
 
 
 def t0check(points=((2.0e-3, 300.0), (5.0e-4, 300.0), (1.6e-4, 1000.0)),
@@ -626,11 +776,19 @@ if __name__ == "__main__":
                     help="scan t0 explicitly against the two-quadrature maximisation")
     ap.add_argument("--extend", action="store_true",
                     help="a low-frequency leg below the scan grid, plus the fiducial")
+    ap.add_argument("--t0scan", action="store_true",
+                    help="rho_crit over the (tau, f0, arrival epoch) cube -> knee_t0.npz")
+    ap.add_argument("--t0report", action="store_true",
+                    help="print what the paper quotes from knee_t0.npz")
     a = ap.parse_args()
     if a.check:
         check()
     elif a.mcmc:
         mcmc()
+    elif a.t0scan:
+        t0scan()
+    elif a.t0report:
+        t0report()
     elif a.t0check:
         t0check()
     elif a.extend:

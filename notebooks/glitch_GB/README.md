@@ -28,11 +28,11 @@ across analyses and not merely their widths; see Sec. "What the split costs".
 | `run_wdm_windows.py` | where does the glitch window lose SNR, and what does cutting a segment do to the noise? | `wdm_windows.npz` | ~3 min, CPU |
 | `run_wdm_segments.py` | what does a short segment do to the glitch fit, and does padding (or mirroring) the segment fix it? | `wdm_segments_fits.npz`, `wdm_segments_scatter.npz` | ~3 min + ~30 min, CPU |
 | `run_gb_only.py` | is the Fisher/MCMC mismatch in psi and fdot the binary's or the glitch's? | `gb_only.npz` | ~1 min, CPU |
-| `run_knee_scan.py` | how far from the fiducial configuration does the glitch/binary separation survive? | `knee_scan.npz`, `knee_mcmc.npz`, `fig_knee_scan.pdf` | ~40 min, GPU |
+| `run_knee_scan.py` | how far from the fiducial configuration does the glitch/binary separation survive? | `knee_scan.npz`, `knee_t0.npz`, `knee_mcmc.npz`, `fig_knee_scan.pdf` | ~40 min, GPU (`--t0scan` ~20 min, CPU) |
 | `run_lpf_snr.py` | how loud are LPF-like glitches, seen by LISA on this grid? | `lpf_snr.npz` | ~2 min |
 | `run_unmodelled.py` | what breaks if the glitch is *not* modelled, in each representation? | `unmodelled.npz`, `fig_unmodelled.pdf` | ~2 h, GPU |
 | `combine_knee_lpf.py` | how often does the population reach its own bias threshold? | — (prints) | seconds |
-| `run_convergence.py` | are the chains converged, and has the Newton step? | `convergence.npz`, `tab_convergence.tex` | ~20 s, CPU |
+| `run_convergence.py` | are the chains converged, and has the Newton step? | `convergence.npz`, `tab_convergence.tex`, `tab_posterior.tex` | ~20 s, CPU |
 | `make_fig_wdm_tdi.py` | — | `fig_wdm_tdi.pdf` | seconds |
 | `make_corner_wdm_vs_fd.py` | — | `fig_wdm_corner.pdf` | seconds |
 | `make_fig_fd.py` | — | `fig_corner.pdf`, `fig_residual.pdf` | seconds |
@@ -66,12 +66,23 @@ window keeps, what the notch removes) and `segments` (whitened noise in segments
 the year, as cut, with the slow noise removed first, and transformed inside a stretch
 three times longer). Neither builds a likelihood.
 
-`run_knee_scan.py` has five modes, and the ones that are not the scan matter as much
+`run_knee_scan.py` has seven modes, and the ones that are not the scan matter as much
 as the scan: `--check` verifies that the degradation and correlation it reports are
 independent of both signal amplitudes, `--t0check` verifies that maximising the bias
 over a constant arrival phase gives the same answer as walking the arrival time
 explicitly, `--mcmc` tests the linearised bias against chains, and `--figure` draws.
 Run the scan first; the others read `knee_scan.npz`.
+
+`--t0scan` is the third axis. The scan holds the glitch's arrival **epoch** at the
+injected `t0 = 400 s`, which is the worst place for it: `f0` and `fdot` are read from
+the phase at the two ends of the year, so a glitch at either end has the most leverage
+on them, while one arriving mid-year is largely decorrelated from the binary's
+derivatives. Walking the epoch raises `rho_crit` by a factor of a few — at the fiducial
+configuration from 532 to 2401 — so `--t0scan` writes the whole `(tau, f0, epoch)` cube
+to `knee_t0.npz`, and `combine_knee_lpf.py` reads it to redo the population count with
+each event's arrival time **drawn over the record** instead of fixed at its start. It is
+cheap because the binary Fisher block does not depend on the epoch: one Hessian per
+`(tau, f0)` as in the scan, then two gradients per epoch.
 
 `fd_pipeline.py` is the shared implementation of the hybrid binned likelihood and
 the sampler, extracted from `glitch_and_gb.ipynb` so that the scripts and the
